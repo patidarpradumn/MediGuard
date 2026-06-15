@@ -131,12 +131,40 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
     `;
 
     try {
-      const response = await fetch("https://overpass-api.de/api/interpreter", {
-        method: "POST",
-        body: query
-      });
+      const overpassUrls = [
+        `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`,
+        `https://overpass.kumi.systems/api/interpreter?data=${encodeURIComponent(query)}`,
+        `https://overpass-api.de/api/interpreter` // POST fallback
+      ];
 
-      if (!response.ok) throw new Error("Overpass API error");
+      let response = null;
+      let fetchError = null;
+
+      for (const url of overpassUrls) {
+        try {
+          if (url.includes("?data=")) {
+            response = await fetch(url, { method: "GET" });
+          } else {
+            response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: "data=" + encodeURIComponent(query)
+            });
+          }
+          if (response && response.ok) {
+            fetchError = null;
+            break;
+          }
+        } catch (err) {
+          fetchError = err;
+        }
+      }
+
+      if (!response || !response.ok) {
+        throw fetchError || new Error("All Overpass servers failed");
+      }
 
       const data = await response.json();
       let elements = data.elements || [];
