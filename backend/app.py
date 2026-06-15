@@ -105,7 +105,7 @@ def signup(request_data: SignupRequest):
         }
     else:
         return {
-            "message": "A verification code has been generated and sent to your email address (simulated email logged in terminal).",
+            "message": f"Simulated OTP: {otp_code} (SMTP is not configured, OTP printed here for your convenience)",
             "email": email,
             "email_sent": False
         }
