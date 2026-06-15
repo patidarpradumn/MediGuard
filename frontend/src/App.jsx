@@ -120,51 +120,10 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
         .openPopup();
     }
 
-    const query = `
-      [out:json][timeout:15];
-      (
-        nw["amenity"="hospital"](around:8000, ${lat}, ${lon});
-        nw["amenity"="doctors"](around:8000, ${lat}, ${lon});
-        nw["amenity"="clinic"](around:8000, ${lat}, ${lon});
-      );
-      out center 35;
-    `;
-
     try {
-      const overpassUrls = [
-        `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`,
-        `https://overpass.kumi.systems/api/interpreter?data=${encodeURIComponent(query)}`,
-        `https://overpass-api.de/api/interpreter` // POST fallback
-      ];
+      const response = await fetch(`${BACKEND_URL}/map/hospitals?lat=${lat}&lon=${lon}`);
 
-      let response = null;
-      let fetchError = null;
-
-      for (const url of overpassUrls) {
-        try {
-          if (url.includes("?data=")) {
-            response = await fetch(url, { method: "GET" });
-          } else {
-            response = await fetch(url, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/x-www-form-urlencoded"
-              },
-              body: "data=" + encodeURIComponent(query)
-            });
-          }
-          if (response && response.ok) {
-            fetchError = null;
-            break;
-          }
-        } catch (err) {
-          fetchError = err;
-        }
-      }
-
-      if (!response || !response.ok) {
-        throw fetchError || new Error("All Overpass servers failed");
-      }
+      if (!response.ok) throw new Error("Failed to query backend proxy.");
 
       const data = await response.json();
       let elements = data.elements || [];

@@ -2,6 +2,9 @@ import os
 import logging
 import hashlib
 import uuid
+import urllib.request
+import urllib.parse
+import json
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -191,6 +194,48 @@ def health_check():
             "message": db_msg
         }
     }
+
+
+@app.get("/map/hospitals")
+def get_nearby_hospitals(lat: float, lon: float):
+    """Proxies the request to Overpass API to prevent CORS blocks and supply User-Agent."""
+    query = f"""
+    [out:json][timeout:15];
+    (
+      nw["amenity"="hospital"](around:8000, {lat}, {lon});
+      nw["amenity"="doctors"](around:8000, {lat}, {lon});
+      nw["amenity"="clinic"](around:8000, {lat}, {lon});
+    );
+    out center 35;
+    """
+    
+    overpass_urls = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter"
+    ]
+    
+    for url in overpass_urls:
+        try:
+            logger.info(f"Proxying hospital search to Overpass server: {url}")
+            req = urllib.request.Request(
+                url,
+                data=urllib.parse.urlencode({"data": query}).encode("utf-8"),
+                headers={
+                    "User-Agent": "MediGuardAI/1.2 (patidarpradumn@gmail.com)",
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=12) as response:
+                if response.status == 200:
+                    return json.loads(response.read().decode("utf-8"))
+        except Exception as e:
+            logger.error(f"Failed to fetch from Overpass server {url}: {e}")
+            
+    raise HTTPException(
+        status_code=502,
+        detail="Failed to query nearby clinics from OpenStreetMap Overpass servers."
+    )
 
 
 # --- PROTECTED APP ENDPOINTS ---
