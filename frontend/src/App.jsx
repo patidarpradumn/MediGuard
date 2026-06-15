@@ -313,6 +313,13 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
         setUserLocation(fallbackLatLng);
         setErrorMsg("Browser does not support geolocation. Showing default location (Delhi).");
       }
+
+      // Auto-invalidate size to fix grey box layout issues in deployed/transitioning environments
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 500);
     }
 
     return () => {
@@ -326,6 +333,11 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
   useEffect(() => {
     if (mapInstanceRef.current && userLocation) {
       fetchNearbyHospitals(userLocation[0], userLocation[1], mapInstanceRef.current, searchSpecialist, userLocation);
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 250);
     }
   }, [searchSpecialist, userLocation]);
 
