@@ -143,3 +143,4 @@ If you prefer to run the components directly on your host machine, follow these 
    ```
 4. Open the URL displayed in the terminal (usually [http://localhost:3000](http://localhost:3000)).
 # MediGuard
+# MediGuard
