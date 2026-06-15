@@ -30,7 +30,7 @@ async function analyzeSymptoms() {
             <p><strong>Entered Symptoms:</strong> ${data.entered_symptoms}</p>
             <p><strong>Matched Symptom:</strong> ${data.matched_symptom}</p>
             <p><strong>Advice:</strong> ${data.advice}</p>
-            <a class="map-link" target="_blank" href="https://www.google.com/maps/search/hospitals+near+me">
+            <a class="map-link" target="_blank" href="https://www.openstreetmap.org/search?query=hospitals+near+me">
                 Find nearby hospitals
             </a>
         `;
