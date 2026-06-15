@@ -1,4 +1,4 @@
-def analyze_symptoms(symptoms_text, age: int, gender: str = "male"):
+def _analyze_symptoms_base(symptoms_text, age: int, gender: str = "male"):
     symptoms = symptoms_text.lower()
     
     # Classify age group
@@ -227,3 +227,34 @@ def analyze_symptoms(symptoms_text, age: int, gender: str = "male"):
         "contact": fallback_contact[age_group],
         "home_remedies": fallback_remedies[age_group]
     }
+
+def analyze_symptoms(symptoms_text, age: int, gender: str = "male"):
+    res = _analyze_symptoms_base(symptoms_text, age, gender)
+    
+    # Calculate risk score and reasons
+    risk = res.get("risk", "Normal")
+    matched_symptom = res.get("matched_symptom", "Not matched")
+    
+    if risk == "Emergency":
+        score = 90
+        reasons = [f"Emergency warning signs triggered for matched symptoms: '{matched_symptom}' (+90)."]
+        if age <= 12 or age >= 65:
+            score = min(100, score + 10)
+            reasons.append(f"Vulnerable age demographic priority safety buffer (+10).")
+    elif risk == "Urgent":
+        score = 60
+        reasons = [f"Urgent medical attention matched for symptoms: '{matched_symptom}' (+60)."]
+        if age <= 12 or age >= 65:
+            score = min(70, score + 10)
+            reasons.append(f"Vulnerable age demographic priority safety buffer (+10).")
+    else: # Normal
+        score = 20
+        reasons = [f"Standard recovery parameters matched for symptoms: '{matched_symptom}' (+20)."]
+        if age <= 12 or age >= 65:
+            score = min(35, score + 5)
+            reasons.append(f"Standard age demographic buffer (+5).")
+            
+    res["risk_score"] = score
+    res["risk_reasons"] = reasons
+    return res
+

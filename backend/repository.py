@@ -156,11 +156,14 @@ class PredictionRepository:
         record = {
             "_id": record_id,
             "email": email_key,
+            "profile": analysis_result.get("profile", "Self"),
             "symptoms": symptoms,
             "age": age,
             "gender": gender,
             "doctor": analysis_result.get("doctor"),
             "risk": analysis_result.get("risk"),
+            "risk_score": analysis_result.get("risk_score", 0),
+            "risk_reasons": analysis_result.get("risk_reasons", []),
             "advice": analysis_result.get("advice"),
             "matched_symptom": analysis_result.get("matched_symptom"),
             "home_remedies": analysis_result.get("home_remedies"),
@@ -185,16 +188,21 @@ class PredictionRepository:
             return record_id
 
     @staticmethod
-    def get_by_user(email: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_by_user(email: str, limit: int = 10, profile: Optional[str] = None) -> List[Dict[str, Any]]:
         db = DatabaseConnection.get_db()
         email_key = email.strip().lower()
         
         if db is None:
             user_preds = [p for p in PredictionRepository._mock_predictions if p["email"] == email_key]
+            if profile:
+                user_preds = [p for p in user_preds if p.get("profile", "Self") == profile]
             user_preds.sort(key=lambda x: x["timestamp"], reverse=True)
             return user_preds[:limit]
         try:
-            cursor = db.predictions.find({"email": email_key}).sort("timestamp", -1).limit(limit)
+            query = {"email": email_key}
+            if profile:
+                query["profile"] = profile
+            cursor = db.predictions.find(query).sort("timestamp", -1).limit(limit)
             predictions = []
             for doc in cursor:
                 doc["_id"] = str(doc["_id"])
@@ -203,8 +211,11 @@ class PredictionRepository:
         except Exception as e:
             logger.error(f"Failed to retrieve predictions for user {email}: {e}")
             user_preds = [p for p in PredictionRepository._mock_predictions if p["email"] == email_key]
+            if profile:
+                user_preds = [p for p in user_preds if p.get("profile", "Self") == profile]
             user_preds.sort(key=lambda x: x["timestamp"], reverse=True)
             return user_preds[:limit]
+
 
 
 class ChatRepository:
@@ -262,3 +273,230 @@ class ChatRepository:
             user_chats = [c for c in ChatRepository._mock_chats if c["email"] == email_key]
             user_chats.sort(key=lambda x: x["timestamp"])
             return user_chats[:limit]
+
+
+class LabReportRepository:
+    """Handles data operations for Lab Reports with in-memory fallback."""
+    _mock_lab_reports: List[Dict[str, Any]] = []
+
+    @staticmethod
+    def save(email: str, profile: str, metrics: Dict[str, float], analysis_result: Dict[str, Any]) -> str:
+        db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        record_id = str(uuid.uuid4())
+        record = {
+            "_id": record_id,
+            "email": email_key,
+            "profile": profile,
+            "metrics": metrics,
+            "analysis": analysis_result,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        LabReportRepository._mock_lab_reports.append(record)
+        
+        if db is None:
+            logger.warning("Database offline. Saved lab report to in-memory store.")
+            return record_id
+        try:
+            mongo_record = record.copy()
+            del mongo_record["_id"]
+            result = db.lab_reports.insert_one(mongo_record)
+            return str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Failed to save lab report to MongoDB: {e}")
+            return record_id
+
+    @staticmethod
+    def get_by_user(email: str, profile: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
+        if db is None:
+            reports = [r for r in LabReportRepository._mock_lab_reports if r["email"] == email_key]
+            if profile:
+                reports = [r for r in reports if r.get("profile", "Self") == profile]
+            reports.sort(key=lambda x: x["timestamp"], reverse=True)
+            return reports[:limit]
+        try:
+            query = {"email": email_key}
+            if profile:
+                query["profile"] = profile
+            cursor = db.lab_reports.find(query).sort("timestamp", -1).limit(limit)
+            reports = []
+            for doc in cursor:
+                doc["_id"] = str(doc["_id"])
+                reports.append(doc)
+            return reports
+        except Exception as e:
+            logger.error(f"Failed to retrieve lab reports: {e}")
+            reports = [r for r in LabReportRepository._mock_lab_reports if r["email"] == email_key]
+            if profile:
+                reports = [r for r in reports if r.get("profile", "Self") == profile]
+            reports.sort(key=lambda x: x["timestamp"], reverse=True)
+            return reports[:limit]
+
+    @staticmethod
+    def delete(report_id: str, email: str) -> bool:
+        db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
+        # Remove from mock
+        initial_len = len(LabReportRepository._mock_lab_reports)
+        LabReportRepository._mock_lab_reports = [
+            r for r in LabReportRepository._mock_lab_reports 
+            if not (r["_id"] == report_id and r["email"] == email_key)
+        ]
+        mock_deleted = len(LabReportRepository._mock_lab_reports) < initial_len
+        
+        if db is None:
+            return mock_deleted
+        try:
+            from bson.objectid import ObjectId
+            try:
+                oid = ObjectId(report_id)
+                res = db.lab_reports.delete_one({"_id": oid, "email": email_key})
+            except Exception:
+                res = db.lab_reports.delete_one({"_id": report_id, "email": email_key})
+            return res.deleted_count > 0 or mock_deleted
+        except Exception as e:
+            logger.error(f"Failed to delete lab report {report_id}: {e}")
+            return mock_deleted
+
+
+class MedicalFileRepository:
+    """Handles metadata operations for Medical Report files with in-memory fallback."""
+    _mock_medical_reports: List[Dict[str, Any]] = []
+
+    @staticmethod
+    def save(email: str, profile: str, file_name: str, file_path: str, content_type: str, file_size: int) -> str:
+        db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        record_id = str(uuid.uuid4())
+        record = {
+            "_id": record_id,
+            "email": email_key,
+            "profile": profile,
+            "file_name": file_name,
+            "file_path": file_path,
+            "content_type": content_type,
+            "file_size": file_size,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        MedicalFileRepository._mock_medical_reports.append(record)
+        
+        if db is None:
+            logger.warning("Database offline. Saved medical report metadata to in-memory store.")
+            return record_id
+        try:
+            mongo_record = record.copy()
+            del mongo_record["_id"]
+            result = db.medical_reports.insert_one(mongo_record)
+            return str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Failed to save medical report metadata to MongoDB: {e}")
+            return record_id
+
+    @staticmethod
+    def get_by_user(email: str, profile: Optional[str] = None) -> List[Dict[str, Any]]:
+        db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
+        if db is None:
+            reports = [r for r in MedicalFileRepository._mock_medical_reports if r["email"] == email_key]
+            if profile:
+                reports = [r for r in reports if r.get("profile", "Self") == profile]
+            reports.sort(key=lambda x: x["timestamp"], reverse=True)
+            return reports
+        try:
+            query = {"email": email_key}
+            if profile:
+                query["profile"] = profile
+            cursor = db.medical_reports.find(query).sort("timestamp", -1)
+            reports = []
+            for doc in cursor:
+                doc["_id"] = str(doc["_id"])
+                reports.append(doc)
+            return reports
+        except Exception as e:
+            logger.error(f"Failed to retrieve medical reports: {e}")
+            reports = [r for r in MedicalFileRepository._mock_medical_reports if r["email"] == email_key]
+            if profile:
+                reports = [r for r in reports if r.get("profile", "Self") == profile]
+            reports.sort(key=lambda x: x["timestamp"], reverse=True)
+            return reports
+
+    @staticmethod
+    def get_by_id(report_id: str, email: str) -> Optional[Dict[str, Any]]:
+        db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
+        if db is None:
+            for r in MedicalFileRepository._mock_medical_reports:
+                if r["_id"] == report_id and r["email"] == email_key:
+                    return r
+            return None
+        try:
+            from bson.objectid import ObjectId
+            try:
+                oid = ObjectId(report_id)
+                doc = db.medical_reports.find_one({"_id": oid, "email": email_key})
+            except Exception:
+                doc = db.medical_reports.find_one({"_id": report_id, "email": email_key})
+            if doc:
+                doc["_id"] = str(doc["_id"])
+                return doc
+            # Try mock fallback
+            for r in MedicalFileRepository._mock_medical_reports:
+                if r["_id"] == report_id and r["email"] == email_key:
+                    return r
+            return None
+        except Exception as e:
+            logger.error(f"Failed to retrieve medical report by ID {report_id}: {e}")
+            for r in MedicalFileRepository._mock_medical_reports:
+                if r["_id"] == report_id and r["email"] == email_key:
+                    return r
+            return None
+
+    @staticmethod
+    def delete(report_id: str, email: str) -> Optional[str]:
+        """Deletes from DB/mock and returns physical file path to delete from disk."""
+        db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
+        file_path_to_delete = None
+        
+        # Find in mock
+        for r in MedicalFileRepository._mock_medical_reports:
+            if r["_id"] == report_id and r["email"] == email_key:
+                file_path_to_delete = r["file_path"]
+                break
+                
+        # Remove from mock
+        MedicalFileRepository._mock_medical_reports = [
+            r for r in MedicalFileRepository._mock_medical_reports 
+            if not (r["_id"] == report_id and r["email"] == email_key)
+        ]
+        
+        if db is None:
+            return file_path_to_delete
+        try:
+            from bson.objectid import ObjectId
+            doc = None
+            try:
+                oid = ObjectId(report_id)
+                doc = db.medical_reports.find_one({"_id": oid, "email": email_key})
+                if doc:
+                    file_path_to_delete = doc.get("file_path")
+                    db.medical_reports.delete_one({"_id": oid, "email": email_key})
+            except Exception:
+                doc = db.medical_reports.find_one({"_id": report_id, "email": email_key})
+                if doc:
+                    file_path_to_delete = doc.get("file_path")
+                    db.medical_reports.delete_one({"_id": report_id, "email": email_key})
+            return file_path_to_delete
+        except Exception as e:
+            logger.error(f"Failed to delete medical report {report_id}: {e}")
+            return file_path_to_delete
+

@@ -5,11 +5,13 @@ import uuid
 import urllib.request
 import urllib.parse
 import json
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 
 # pyrefly: ignore [missing-import]
 from fastapi import FastAPI, HTTPException, status, Header, Form, File, UploadFile
+from fastapi.responses import FileResponse
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,14 +24,17 @@ from google.antigravity.types import Image, Document
 
 # Layer Imports
 from config import Config
-from schemas import SignupRequest, VerifyOtpRequest, LoginRequest, SymptomRequest
+from schemas import SignupRequest, VerifyOtpRequest, LoginRequest, SymptomRequest, LabReportRequest
 from repository import (
     DatabaseConnection,
     UserRepository,
     PredictionRepository,
-    ChatRepository
+    ChatRepository,
+    LabReportRepository,
+    MedicalFileRepository
 )
 from services import OTPService, EmailService, SymptomAnalysisService
+from lab_engine import analyze_lab_values
 
 # Configure logging
 logging.basicConfig(
@@ -270,6 +275,9 @@ def analyze(request_data: SymptomRequest, authorization: Optional[str] = Header(
         # 1. Analyze symptoms via service
         analysis_result = SymptomAnalysisService.analyze(symptoms_text, age, gender)
         
+        # Attach family profile info to payload
+        analysis_result["profile"] = request_data.profile
+        
         # 2. Save prediction history to repository
         PredictionRepository.save(symptoms_text, age, gender, user_email, analysis_result)
         
@@ -282,7 +290,7 @@ def analyze(request_data: SymptomRequest, authorization: Optional[str] = Header(
         )
 
 @app.get("/history")
-def history(authorization: Optional[str] = Header(None)):
+def history(profile: Optional[str] = None, authorization: Optional[str] = Header(None)):
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -298,7 +306,7 @@ def history(authorization: Optional[str] = Header(None)):
         )
 
     try:
-        prediction_logs = PredictionRepository.get_by_user(email=user_email, limit=10)
+        prediction_logs = PredictionRepository.get_by_user(email=user_email, limit=10, profile=profile)
         return {"history": prediction_logs}
     except Exception as e:
         logger.error(f"Error fetching logs history: {e}", exc_info=True)
@@ -646,3 +654,238 @@ def agent_history(authorization: Optional[str] = Header(None)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while fetching chat history."
         )
+
+# --- EXTENDED MEDICALL MODULE ROUTES ---
+
+@app.get("/profiles")
+def get_family_profiles():
+    return ["Self", "Father", "Mother", "Brother", "Sister"]
+
+@app.post("/lab-analyze")
+def lab_analyze(request_data: LabReportRequest, authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    metrics = {
+        "hemoglobin": request_data.hemoglobin,
+        "wbc": request_data.wbc,
+        "platelets": request_data.platelets,
+        "sugar": request_data.sugar,
+        "vitamin_d": request_data.vitamin_d,
+        "cholesterol": request_data.cholesterol,
+        "creatinine": request_data.creatinine
+    }
+    
+    gender = user.get("gender", "male")
+    analysis_result = analyze_lab_values(metrics, gender)
+    
+    # Save lab values report
+    report_id = LabReportRepository.save(user_email, request_data.profile, metrics, analysis_result)
+    analysis_result["_id"] = report_id
+    analysis_result["profile"] = request_data.profile
+    analysis_result["metrics"] = metrics
+    analysis_result["timestamp"] = datetime.utcnow().isoformat()
+    
+    return analysis_result
+
+@app.get("/lab-reports")
+def get_lab_reports(profile: Optional[str] = None, authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    reports = LabReportRepository.get_by_user(user_email, profile=profile)
+    return {"reports": reports}
+
+@app.delete("/lab-reports/{report_id}")
+def delete_lab_report(report_id: str, authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    success = LabReportRepository.delete(report_id, user_email)
+    if not success:
+        raise HTTPException(status_code=404, detail="Lab report not found or delete failed.")
+    return {"message": "Lab report deleted successfully."}
+
+@app.post("/reports/upload")
+async def upload_medical_report(
+    profile: str = Form("Self"),
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None)
+):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    # Define absolute uploads directory inside project workspace
+    uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    file_ext = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(uploads_dir, unique_filename)
+    
+    try:
+        content = await file.read()
+        with open(file_path, "wb") as buffer:
+            buffer.write(content)
+        file_size = len(content)
+    except Exception as e:
+        logger.error(f"Failed to save physical file upload on server: {e}")
+        raise HTTPException(status_code=500, detail="Failed to write report file on server.")
+        
+    report_id = MedicalFileRepository.save(
+        email=user_email,
+        profile=profile,
+        file_name=file.filename,
+        file_path=file_path,
+        content_type=file.content_type or "application/octet-stream",
+        file_size=file_size
+    )
+    
+    return {
+        "message": "File uploaded successfully.",
+        "report_id": report_id,
+        "file_name": file.filename,
+        "profile": profile
+    }
+
+@app.get("/reports")
+def get_medical_reports(profile: Optional[str] = None, authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    files = MedicalFileRepository.get_by_user(user_email, profile=profile)
+    return {"reports": files}
+
+@app.get("/reports/view/{report_id}")
+def view_medical_report(report_id: str, authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    meta = MedicalFileRepository.get_by_id(report_id, user_email)
+    if not meta or not os.path.exists(meta["file_path"]):
+        raise HTTPException(status_code=404, detail="Medical report file not found on server.")
+        
+    return FileResponse(meta["file_path"], media_type=meta["content_type"])
+
+@app.get("/reports/download/{report_id}")
+def download_medical_report(report_id: str, authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    meta = MedicalFileRepository.get_by_id(report_id, user_email)
+    if not meta or not os.path.exists(meta["file_path"]):
+        raise HTTPException(status_code=404, detail="Medical report file not found on server.")
+        
+    return FileResponse(
+        meta["file_path"],
+        media_type="application/octet-stream",
+        filename=meta["file_name"]
+    )
+
+@app.delete("/reports/{report_id}")
+def delete_medical_report(report_id: str, authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    file_path = MedicalFileRepository.delete(report_id, user_email)
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            logger.error(f"Failed to remove physical file {file_path}: {e}")
+            
+    return {"message": "Report deleted successfully."}
+
+@app.get("/dashboard/stats")
+def get_dashboard_stats(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token is missing.")
+    user_email = authorization.replace("Bearer ", "").strip().lower()
+    user = UserRepository.get_by_email(user_email)
+    if not user or not user.get("is_verified"):
+        raise HTTPException(status_code=401, detail="Invalid session token.")
+        
+    preds = PredictionRepository.get_by_user(email=user_email, limit=100)
+    total_diagnoses = len(preds)
+    
+    risk_counts = {"Normal": 0, "Urgent": 0, "Emergency": 0}
+    profile_counts = {}
+    symptom_freq = {}
+    
+    monthly_counts = {}
+    
+    for p in preds:
+        r = p.get("risk", "Normal")
+        risk_counts[r] = risk_counts.get(r, 0) + 1
+        
+        prof = p.get("profile", "Self")
+        profile_counts[prof] = profile_counts.get(prof, 0) + 1
+        
+        syms_text = p.get("symptoms", "").lower()
+        cleaned_words = re.findall(r'\b[a-z]{3,}\b', syms_text)
+        for w in cleaned_words:
+            if w not in {"and", "the", "with", "for", "from", "have", "pain", "fever", "cough", "ache", "symptom", "symptoms"}:
+                symptom_freq[w] = symptom_freq.get(w, 0) + 1
+                
+        ts = p.get("timestamp")
+        if ts:
+            try:
+                dt = datetime.fromisoformat(ts)
+                month_str = dt.strftime("%b %Y")
+                monthly_counts[month_str] = monthly_counts.get(month_str, 0) + 1
+            except Exception:
+                pass
+                
+    sorted_symptoms = sorted(symptom_freq.items(), key=lambda x: x[1], reverse=True)[:5]
+    common_symptoms = [{"symptom": k, "count": v} for k, v in sorted_symptoms]
+    
+    trend_list = []
+    now = datetime.utcnow()
+    for i in range(5, -1, -1):
+        past_date = now - timedelta(days=i*30)
+        m_key = past_date.strftime("%b %Y")
+        trend_list.append({
+            "month": m_key,
+            "count": monthly_counts.get(m_key, 0)
+        })
+        
+    return {
+        "total_diagnoses": total_diagnoses,
+        "risk_statistics": risk_counts,
+        "profile_statistics": profile_counts,
+        "common_symptoms": common_symptoms,
+        "monthly_trend": trend_list
+    }
+
