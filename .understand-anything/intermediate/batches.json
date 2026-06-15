@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "louvain",
+  "totalFiles": 29,
+  "totalBatches": 6,
+  "exportsByPath": {
+    ".DS_Store": [],
+    "backend/app.py": [
+      "hash_password",
+      "signup",
+      "verify_otp",
+      "login",
+      "startup_event",
+      "home",
+      "health_check",
+      "analyze",
+      "history",
+      "agent_chat",
+      "agent_history"
+    ],
+    "backend/config.py": [
+      "Config"
+    ],
+    "backend/database.py": [
+      "get_db",
+      "check_db_health",
+      "get_user_by_email",
+      "create_user",
+      "verify_user",
+      "save_prediction",
+      "get_predictions",
+      "save_chat_message",
+      "get_chat_history",
+      "set_user_conversation_id"
+    ],
+    "backend/harness.py": [
+      "check_harness"
+    ],
+    "backend/repository.py": [
+      "DatabaseConnection",
+      "UserRepository",
+      "PredictionRepository",
+      "ChatRepository"
+    ],
+    "backend/schemas.py": [
+      "SignupRequest",
+      "VerifyOtpRequest",
+      "LoginRequest",
+      "SymptomRequest"
+    ],
+    "backend/services.py": [
+      "EmailService",
+      "OTPService",
+      "SymptomAnalysisService"
+    ],
+    "backend/symptom_engine.py": [
+      "analyze_symptoms"
+    ],
+    "frontend/script.js": [],
+    "frontend/src/App.jsx": [],
+    "frontend/src/main.jsx": [],
+    "frontend/vite.config.js": []
+  },
+  "batches": [
+    {
+      "batchIndex": 1,
+      "files": [
+        {
+          "path": "backend/Dockerfile",
+          "language": "dockerfile",
+          "sizeLines": 22,
+          "fileCategory": "infra"
+        }
+      ],
+      "batchImportData": {
+        "backend/Dockerfile": []
+      },
+      "neighborMap": {}
+    },
+    {
+      "batchIndex": 2,
+      "files": [
+        {
+          "path": "frontend/Dockerfile",
+          "language": "dockerfile",
+          "sizeLines": 27,
+          "fileCategory": "infra"
+        }
+      ],
+      "batchImportData": {
+        "frontend/Dockerfile": []
+      },
+      "neighborMap": {}
+    },
+    {
+      "batchIndex": 3,
+      "files": [
+        {
+          "path": ".env",
+          "language": "config",
+          "sizeLines": 11,
+          "fileCategory": "config"
+        },
+        {
+          "path": ".env.example",
+          "language": "config",
+          "sizeLines": 8,
+          "fileCategory": "config"
+        },
+        {
+          "path": "AGENTS.md",
+          "language": "markdown",
+          "sizeLines": 93,
+          "fileCategory": "docs"
+        },
+        {
+          "path": "README.md",
+          "language": "markdown",
+          "sizeLines": 144,
+          "fileCategory": "docs"
+        },
+        {
+          "path": "docker-compose.yml",
+          "language": "yaml",
+          "sizeLines": 54,
+          "fileCategory": "infra"
+        },
+        {
+          "path": "prompt .text",
+          "language": "text",
+          "sizeLines": 5,
+          "fileCategory": "docs"
+        }
+      ],
+      "batchImportData": {
+        ".env": [],
+        ".env.example": [],
+        "AGENTS.md": [],
+        "README.md": [],
+        "docker-compose.yml": [],
+        "prompt .text": []
+      },
+      "neighborMap": {}
+    },
+    {
+      "batchIndex": 4,
+      "files": [
+        {
+          "path": "backend/.env",
+          "language": "config",
+          "sizeLines": 16,
+          "fileCategory": "config"
+        },
+        {
+          "path": "backend/context.txt",
+          "language": "txt",
+          "sizeLines": 0,
+          "fileCategory": "docs"
+        },
+        {
+          "path": "backend/requirements.txt",
+          "language": "txt",
+          "sizeLines": 7,
+          "fileCategory": "docs"
+        }
+      ],
+      "batchImportData": {
+        "backend/.env": [],
+        "backend/context.txt": [],
+        "backend/requirements.txt": []
+      },
+      "neighborMap": {}
+    },
+    {
+      "batchIndex": 5,
+      "files": [
+        {
+          "path": "frontend/index.html",
+          "language": "html",
+          "sizeLines": 20,
+          "fileCategory": "markup"
+        },
+        {
+          "path": "frontend/package.json",
+          "language": "json",
+          "sizeLines": 21,
+          "fileCategory": "config"
+        },
+        {
+          "path": "frontend/style.css",
+          "language": "css",
+          "sizeLines": 100,
+          "fileCategory": "markup"
+        }
+      ],
+      "batchImportData": {
+        "frontend/index.html": [],
+        "frontend/package.json": [],
+        "frontend/style.css": []
+      },
+      "neighborMap": {}
+    },
+    {
+      "batchIndex": 6,
+      "files": [
+        {
+          "path": ".DS_Store",
+          "language": "unknown",
+          "sizeLines": 3,
+          "fileCategory": "code"
+        },
+        {
+          "path": "backend/app.py",
+          "language": "python",
+          "sizeLines": 483,
+          "fileCategory": "code"
+        },
+        {
+          "path": "backend/config.py",
+          "language": "python",
+          "sizeLines": 30,
+          "fileCategory": "code"
+        },
+        {
+          "path": "backend/database.py",
+          "language": "python",
+          "sizeLines": 231,
+          "fileCategory": "code"
+        },
+        {
+          "path": "backend/harness.py",
+          "language": "python",
+          "sizeLines": 47,
+          "fileCategory": "code"
+        },
+        {
+          "path": "backend/repository.py",
+          "language": "python",
+          "sizeLines": 209,
+          "fileCategory": "code"
+        },
+        {
+          "path": "backend/schemas.py",
+          "language": "python",
+          "sizeLines": 18,
+          "fileCategory": "code"
+        },
+        {
+          "path": "backend/services.py",
+          "language": "python",
+          "sizeLines": 123,
+          "fileCategory": "code"
+        },
+        {
+          "path": "backend/symptom_engine.py",
+          "language": "python",
+          "sizeLines": 229,
+          "fileCategory": "code"
+        },
+        {
+          "path": "docs/APP_PROMPT.md",
+          "language": "markdown",
+          "sizeLines": 45,
+          "fileCategory": "docs"
+        },
+        {
+          "path": "frontend/script.js",
+          "language": "javascript",
+          "sizeLines": 40,
+          "fileCategory": "code"
+        },
+        {
+          "path": "frontend/src/App.css",
+          "language": "css",
+          "sizeLines": 2214,
+          "fileCategory": "markup"
+        },
+        {
+          "path": "frontend/src/App.jsx",
+          "language": "javascript",
+          "sizeLines": 1451,
+          "fileCategory": "code"
+        },
+        {
+          "path": "frontend/src/main.jsx",
+          "language": "javascript",
+          "sizeLines": 10,
+          "fileCategory": "code"
+        },
+        {
+          "path": "frontend/vite.config.js",
+          "language": "javascript",
+          "sizeLines": 11,
+          "fileCategory": "code"
+        }
+      ],
+      "batchImportData": {
+        ".DS_Store": [],
+        "backend/app.py": [],
+        "backend/config.py": [],
+        "backend/database.py": [],
+        "backend/harness.py": [],
+        "backend/repository.py": [],
+        "backend/schemas.py": [],
+        "backend/services.py": [],
+        "backend/symptom_engine.py": [],
+        "docs/APP_PROMPT.md": [],
+        "frontend/script.js": [],
+        "frontend/src/App.css": [],
+        "frontend/src/App.jsx": [],
+        "frontend/src/main.jsx": [],
+        "frontend/vite.config.js": []
+      },
+      "neighborMap": {}
+    }
+  ]
+}

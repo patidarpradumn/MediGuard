@@ -1,0 +1,250 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "AI Healthcare Assistant",
+    "languages": ["python", "javascript", "html", "css", "yaml", "markdown"],
+    "frameworks": ["fastapi", "react", "vite", "mongodb", "docker"],
+    "description": "Restructured AI-powered healthcare symptom advisor and clinical wellness chat portal using a strict SOLID layered architecture.",
+    "analyzedAt": "2026-06-08T12:00:00Z",
+    "gitCommitHash": "baseline"
+  },
+  "nodes": [
+    {
+      "id": "file:backend/app.py",
+      "type": "file",
+      "name": "app.py",
+      "filePath": "backend/app.py",
+      "summary": "FASTAPI controller exposing authentication, diagnostics, history, and wellness chatbot endpoints. Coordinates services and repositories.",
+      "tags": ["controller", "fastapi", "routes", "chatbot"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:backend/config.py",
+      "type": "file",
+      "name": "config.py",
+      "filePath": "backend/config.py",
+      "summary": "Centralized config settings loading and validating environment variables (MONGO_URI, SMTP, Gemini API).",
+      "tags": ["config", "environment", "dotenv"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:backend/schemas.py",
+      "type": "file",
+      "name": "schemas.py",
+      "filePath": "backend/schemas.py",
+      "summary": "Pydantic request models and schemas for type safety and route parameter validation.",
+      "tags": ["schema", "pydantic", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:backend/repository.py",
+      "type": "file",
+      "name": "repository.py",
+      "filePath": "backend/repository.py",
+      "summary": "Database repository layer implementing isolated MongoDB queries for users, predictions, and chat logs.",
+      "tags": ["repository", "mongodb", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:backend/services.py",
+      "type": "file",
+      "name": "services.py",
+      "filePath": "backend/services.py",
+      "summary": "Encapsulated business service layer managing OTP creation, SMTP email delivery, and symptom-analysis orchestration.",
+      "tags": ["service", "business-logic", "otp", "smtp"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:backend/symptom_engine.py",
+      "type": "file",
+      "name": "symptom_engine.py",
+      "filePath": "backend/symptom_engine.py",
+      "summary": "Pure rule-based symptom engine matching symptoms with doctor specialties, severity risk levels, and first-care remedies.",
+      "tags": ["rules", "engine", "diagnosis"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:backend/harness.py",
+      "type": "file",
+      "name": "harness.py",
+      "filePath": "backend/harness.py",
+      "summary": "Mechanical architecture linter ensuring no config leakage or database imports exist in controllers or services.",
+      "tags": ["linter", "harness", "testing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/App.jsx",
+      "type": "file",
+      "name": "App.jsx",
+      "filePath": "frontend/src/App.jsx",
+      "summary": "React single-page app containing symptom analysis input, diagnosis dashboard, OpenStreetMap locator, and chatbot widget.",
+      "tags": ["frontend", "react", "ui", "map"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/App.css",
+      "type": "file",
+      "name": "App.css",
+      "filePath": "frontend/src/App.css",
+      "summary": "CSS styles layout implementing healthcare themes, glassmorphism card templates, and mobile-responsive overlays.",
+      "tags": ["styles", "css", "layout"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:docker-compose.yml",
+      "type": "file",
+      "name": "docker-compose.yml",
+      "filePath": "docker-compose.yml",
+      "summary": "Docker orchestration coordinating backend containers, Nginx frontend, and local MongoDB database.",
+      "tags": ["docker", "infrastructure", "compose"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:AGENTS.md",
+      "type": "file",
+      "name": "AGENTS.md",
+      "filePath": "AGENTS.md",
+      "summary": "Developer agent guide mapping codebase architectural layers, harness checks, and SOLID/DRY rules.",
+      "tags": ["documentation", "agents", "guide"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:backend/app.py",
+      "target": "file:backend/schemas.py",
+      "type": "imports",
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/app.py",
+      "target": "file:backend/config.py",
+      "type": "imports",
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/app.py",
+      "target": "file:backend/repository.py",
+      "type": "imports",
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/app.py",
+      "target": "file:backend/services.py",
+      "type": "imports",
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/services.py",
+      "target": "file:backend/config.py",
+      "type": "imports",
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/services.py",
+      "target": "file:backend/symptom_engine.py",
+      "type": "imports",
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/repository.py",
+      "target": "file:backend/config.py",
+      "type": "imports",
+      "direction": "forward"
+    },
+    {
+      "source": "file:frontend/src/App.jsx",
+      "target": "file:frontend/src/App.css",
+      "type": "imports",
+      "direction": "forward"
+    },
+    {
+      "source": "file:frontend/src/App.jsx",
+      "target": "file:backend/app.py",
+      "type": "calls",
+      "direction": "forward"
+    },
+    {
+      "source": "file:backend/harness.py",
+      "target": "file:backend/app.py",
+      "type": "related",
+      "direction": "forward"
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:config",
+      "name": "Configuration Layer",
+      "description": "Loads and validates environment settings.",
+      "nodeIds": ["file:backend/config.py", "file:backend/.env"]
+    },
+    {
+      "id": "layer:schemas",
+      "name": "Schemas Validation Layer",
+      "description": "Defines typed Pydantic parameter boundaries.",
+      "nodeIds": ["file:backend/schemas.py"]
+    },
+    {
+      "id": "layer:repository",
+      "name": "Database Repository Layer",
+      "description": "Direct MongoDB operations isolated from controllers.",
+      "nodeIds": ["file:backend/repository.py"]
+    },
+    {
+      "id": "layer:services",
+      "name": "Domain Services Layer",
+      "description": "Encapsulates business operations, OTP logic, and diagnostics.",
+      "nodeIds": ["file:backend/services.py", "file:backend/symptom_engine.py"]
+    },
+    {
+      "id": "layer:controller",
+      "name": "Web Controller Layer",
+      "description": "FatAPI routing controllers mapping endpoints to services.",
+      "nodeIds": ["file:backend/app.py"]
+    },
+    {
+      "id": "layer:frontend",
+      "name": "Frontend Application Layer",
+      "description": "React single page dashboard, styles, and asset layouts.",
+      "nodeIds": ["file:frontend/src/App.jsx", "file:frontend/src/App.css"]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Welcome and Guidelines",
+      "description": "Read AGENTS.md first to understand the layered boundaries and SOLID guidelines of this repository.",
+      "nodeIds": ["file:AGENTS.md"]
+    },
+    {
+      "order": 2,
+      "title": "Centralized Config",
+      "description": "Inspect config.py to see how env vars are unified and validated.",
+      "nodeIds": ["file:backend/config.py"]
+    },
+    {
+      "order": 3,
+      "title": "Data Access Boundary",
+      "description": "Explore repository.py to understand how MongoDB collections are read/written.",
+      "nodeIds": ["file:backend/repository.py"]
+    },
+    {
+      "order": 4,
+      "title": "Business Flow Logic",
+      "description": "Review services.py for OTP verification routines, email alerts, and symptom matching coordination.",
+      "nodeIds": ["file:backend/services.py"]
+    },
+    {
+      "order": 5,
+      "title": "Exposing the APIs",
+      "description": "Check app.py for endpoint definition mapping requests to response serializers.",
+      "nodeIds": ["file:backend/app.py"]
+    },
+    {
+      "order": 6,
+      "title": "Client Experience",
+      "description": "Explore App.jsx to see how the single page React client interacts with the FastAPI servers.",
+      "nodeIds": ["file:frontend/src/App.jsx"]
+    }
+  ]
+}
