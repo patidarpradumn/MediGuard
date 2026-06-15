@@ -681,6 +681,7 @@ body::after {
 /* Age Slider 3D Stylings */
 .age-slider-3d {
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   height: 8px;
   border-radius: 4px;
@@ -2522,4 +2523,44 @@ body::after {
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-weight: 700;
+}
+
+/* Voice & Speech Input Mic Button Animation */
+.voice-mic-btn-3d:hover {
+  transform: scale(1.1) rotate(5deg);
+  background: rgba(34, 211, 238, 0.15) !important;
+}
+.voice-mic-btn-3d.listening {
+  animation: pulse-listening 1.5s infinite alternate ease-in-out;
+}
+@keyframes pulse-listening {
+  0% {
+    box-shadow: 0 0 4px rgba(225, 29, 72, 0.4);
+    transform: scale(1);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(225, 29, 72, 0.8);
+    transform: scale(1.12);
+  }
+}
+
+/* File Upload Drop Zone Styling */
+.file-upload-drag-area {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.file-upload-drag-area:hover {
+  border-color: var(--primary) !important;
+  background: rgba(34, 211, 238, 0.05) !important;
+  box-shadow: 0 4px 15px rgba(34, 211, 238, 0.05);
+  transform: translateY(-2px);
+}
+
+/* SVG Line Graph styles */
+svg circle {
+  transition: r 0.2s ease, stroke-width 0.2s ease;
+}
+svg circle:hover {
+  r: 6px !important;
+  stroke-width: 3px !important;
+  cursor: pointer;
 }

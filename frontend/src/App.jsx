@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { jsPDF } from 'jspdf';
 
 // Backend URL resolution
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -622,6 +623,17 @@ const translations = {
     // Dashboard Subtabs
     tabAnalyzer: "🩺 Clinical Analyzer Terminal",
     tabChatbot: "💬 Consult Wellness AI",
+    tabLabAnalyzer: "🧪 Lab Value Analyzer",
+    tabReportStorage: "📂 Medical Reports",
+    tabDashboard: "📊 Health Dashboard",
+    tabEmergency: "🚨 Emergency Center",
+    profileLabel: "Active Family Profile",
+    allProfiles: "All Profiles",
+    filterProfileLabel: "Filter by Profile",
+    voiceInputTooltip: "Speak symptoms using voice",
+    riskScoreLabel: "Symptom Urgency Score",
+    reasonsLabel: "Clinical Assessment Justifications",
+    exportReportBtn: "Export Report to PDF",
 
     // Clinical Analyzer Terminal
     analyzerTitle: "Clinical Symptom Terminal",
@@ -840,6 +852,17 @@ const translations = {
     // Dashboard Subtabs
     tabAnalyzer: "🩺 क्लिनिकल एनालाइजर टर्मिनल",
     tabChatbot: "💬 वेलनेस एआई सलाहकार",
+    tabLabAnalyzer: "🧪 लैब रिपोर्ट विश्लेषक",
+    tabReportStorage: "📂 मेडिकल रिपोर्ट्स",
+    tabDashboard: "📊 स्वास्थ्य डैशबोर्ड",
+    tabEmergency: "🚨 आपातकालीन केंद्र",
+    profileLabel: "सक्रिय पारिवारिक प्रोफ़ाइल",
+    allProfiles: "सभी प्रोफ़ाइल",
+    filterProfileLabel: "प्रोफ़ाइल द्वारा फ़िल्टर करें",
+    voiceInputTooltip: "आवाज द्वारा लक्षण बोलें",
+    riskScoreLabel: "लक्षण गंभीरता स्कोर",
+    reasonsLabel: "क्लिनिकल मूल्यांकन के कारण",
+    exportReportBtn: "निदान रिपोर्ट पीडीएफ में डाउनलोड करें",
 
     // Clinical Analyzer Terminal
     analyzerTitle: "क्लिनिकल लक्षण टर्मिनल",
@@ -1058,6 +1081,17 @@ const translations = {
     // Dashboard Subtabs
     tabAnalyzer: "🩺 Clinical Analyzer Terminal",
     tabChatbot: "💬 Consult Wellness AI",
+    tabLabAnalyzer: "🧪 Lab Report Analyzer",
+    tabReportStorage: "📂 Medical Reports",
+    tabDashboard: "📊 Health Dashboard",
+    tabEmergency: "🚨 Emergency Center",
+    profileLabel: "Active Family Profile",
+    allProfiles: "All Profiles",
+    filterProfileLabel: "Filter by profile",
+    voiceInputTooltip: "Speak symptoms with mic",
+    riskScoreLabel: "Symptom Urgency Score",
+    reasonsLabel: "Clinical Assessment Reasons",
+    exportReportBtn: "Export Report to PDF",
 
     // Clinical Analyzer Terminal
     analyzerTitle: "Clinical Symptom Terminal",
@@ -1487,6 +1521,37 @@ function App() {
   const [darkMode, setDarkMode] = useState(false); // Default to light mode for maximum legibility and clear contrast, user can toggle
   const [healthStatus, setHealthStatus] = useState({ online: false, db: 'disconnected' });
 
+  // Extended features state variables
+  const [selectedProfile, setSelectedProfile] = useState('Self');
+  const [profiles, setProfiles] = useState(['Self', 'Father', 'Mother', 'Brother', 'Sister']);
+  const [profileFilter, setProfileFilter] = useState('');
+  
+  // Lab Analyzer Form States
+  const [labHemoglobin, setLabHemoglobin] = useState('');
+  const [labWbc, setLabWbc] = useState('');
+  const [labPlatelets, setLabPlatelets] = useState('');
+  const [labSugar, setLabSugar] = useState('');
+  const [labVitaminD, setLabVitaminD] = useState('');
+  const [labCholesterol, setLabCholesterol] = useState('');
+  const [labCreatinine, setLabCreatinine] = useState('');
+  const [labResult, setLabResult] = useState(null);
+  const [labReports, setLabReports] = useState([]);
+  const [labLoading, setLabLoading] = useState(false);
+  
+  // Report Storage States
+  const [medicalReports, setMedicalReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+
+  // Voice Input State
+  const [isListening, setIsListening] = useState(false);
+  
+  // Dashboard Stats State
+  const [dashboardStats, setDashboardStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+
   // Quick symptom tags for easy testing
   const quickTags = [
     { key: 'tagChestPain', value: 'I have severe chest pain and short breath' },
@@ -1519,12 +1584,16 @@ function App() {
   };
 
   // Fetch prediction history for logged in user
-  const fetchHistory = async (userToken) => {
+  const fetchHistory = async (userToken, filterProf = profileFilter) => {
     const activeToken = userToken || token;
     if (!activeToken) return;
 
     try {
-      const response = await fetch(`${BACKEND_URL}/history`, {
+      let url = `${BACKEND_URL}/history`;
+      if (filterProf) {
+        url += `?profile=${encodeURIComponent(filterProf)}`;
+      }
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${activeToken}`
         }
@@ -1538,6 +1607,334 @@ function App() {
     } catch (err) {
       console.error('Error fetching history:', err);
     }
+  };
+
+  // Fetch lab reports history
+  const fetchLabReports = async (userToken, filterProf = profileFilter) => {
+    const activeToken = userToken || token;
+    if (!activeToken) return;
+
+    try {
+      let url = `${BACKEND_URL}/lab-reports`;
+      if (filterProf) {
+        url += `?profile=${encodeURIComponent(filterProf)}`;
+      }
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${activeToken}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setLabReports(data.reports || []);
+      }
+    } catch (err) {
+      console.error('Error fetching lab reports:', err);
+    }
+  };
+
+  // Handle Lab Values Analysis Submission
+  const handleLabAnalyze = async (e) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    setLabResult(null);
+
+    if (!labHemoglobin || !labWbc || !labPlatelets || !labSugar || !labVitaminD || !labCholesterol || !labCreatinine) {
+      setErrorMessage(language === 'hi' ? 'कृपया सभी फ़ील्ड के मान दर्ज करें।' : 'Please enter values for all lab metrics.');
+      return;
+    }
+
+    setLabLoading(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/lab-analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          profile: selectedProfile,
+          hemoglobin: parseFloat(labHemoglobin),
+          wbc: parseFloat(labWbc),
+          platelets: parseFloat(labPlatelets),
+          sugar: parseFloat(labSugar),
+          vitamin_d: parseFloat(labVitaminD),
+          cholesterol: parseFloat(labCholesterol),
+          creatinine: parseFloat(labCreatinine)
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Lab analysis failed.');
+      }
+
+      setLabResult(data);
+      setSuccessMessage(language === 'hi' ? 'लैब रिपोर्ट सफलतापूर्वक विश्लेषित और सहेजी गई!' : 'Lab values analyzed and saved successfully!');
+      fetchLabReports(token, profileFilter);
+    } catch (err) {
+      setErrorMessage(err.message);
+    } finally {
+      setLabLoading(false);
+    }
+  };
+
+  // Handle Lab Report Delete
+  const handleDeleteLabReport = async (reportId) => {
+    if (!confirm(language === 'hi' ? 'क्या आप इस लैब रिपोर्ट को हटाना चाहते हैं?' : 'Are you sure you want to delete this lab report?')) return;
+    try {
+      const response = await fetch(`${BACKEND_URL}/lab-reports/${reportId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        fetchLabReports(token, profileFilter);
+      }
+    } catch (err) {
+      console.error('Failed to delete lab report:', err);
+    }
+  };
+
+  // Fetch medical files list
+  const fetchMedicalReports = async (userToken, filterProf = profileFilter) => {
+    const activeToken = userToken || token;
+    if (!activeToken) return;
+    setReportsLoading(true);
+
+    try {
+      let url = `${BACKEND_URL}/reports`;
+      if (filterProf) {
+        url += `?profile=${encodeURIComponent(filterProf)}`;
+      }
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${activeToken}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMedicalReports(data.reports || []);
+      }
+    } catch (err) {
+      console.error('Error fetching medical reports:', err);
+    } finally {
+      setReportsLoading(false);
+    }
+  };
+
+  // Handle Upload File
+  const handleUploadReport = async (e) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    if (!uploadFile) {
+      setErrorMessage(language === 'hi' ? 'कृपया अपलोड करने के लिए फ़ाइल चुनें।' : 'Please select a file to upload first.');
+      return;
+    }
+
+    setUploadLoading(true);
+    const formData = new FormData();
+    formData.append('profile', selectedProfile);
+    formData.append('file', uploadFile);
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/reports/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'File upload failed.');
+      }
+
+      setSuccessMessage(language === 'hi' ? 'फ़ाइल सफलतापूर्वक अपलोड हो गई!' : 'File uploaded successfully!');
+      setUploadFile(null);
+      
+      // Clear standard input node
+      const fileInput = document.getElementById('report-file-input');
+      if (fileInput) fileInput.value = '';
+      
+      fetchMedicalReports(token, profileFilter);
+    } catch (err) {
+      setErrorMessage(err.message);
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
+  // Handle Delete File
+  const handleDeleteReport = async (reportId) => {
+    if (!confirm(language === 'hi' ? 'क्या आप इस फ़ाइल को हटाना चाहते हैं?' : 'Are you sure you want to delete this report?')) return;
+    try {
+      const response = await fetch(`${BACKEND_URL}/reports/${reportId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        fetchMedicalReports(token, profileFilter);
+      }
+    } catch (err) {
+      console.error('Failed to delete medical report:', err);
+    }
+  };
+
+  // Fetch Dashboard statistics
+  const fetchDashboardStats = async (userToken) => {
+    const activeToken = userToken || token;
+    if (!activeToken) return;
+    setStatsLoading(true);
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/dashboard/stats`, {
+        headers: {
+          'Authorization': `Bearer ${activeToken}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDashboardStats(data);
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard stats:', err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Voice recognition via Browser Web Speech API (Free, Offline-friendly fallback)
+  const startSpeechRecognition = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Web Speech API is not supported in this browser. Please use Google Chrome or Safari.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = language === 'hi' ? 'hi-IN' : 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      setSymptoms(prev => prev ? prev + ' ' + transcript : transcript);
+    };
+
+    recognition.onerror = (err) => {
+      console.error('Speech recognition error:', err);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
+  // PDF report export using client-side jsPDF
+  const exportReportToPDF = (record) => {
+    if (!record) return;
+    const doc = new jsPDF();
+
+    // Color palette matching dark/light branding
+    const primaryColor = [225, 29, 72];
+    
+    // Top Banner Background
+    doc.setFillColor(248, 250, 252);
+    doc.rect(0, 0, 210, 45, 'F');
+
+    // Title
+    doc.setTextColor(225, 29, 72);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(26);
+    doc.text("MediGuard AI", 20, 25);
+
+    // Subtitle
+    doc.setTextColor(100, 116, 139);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Clinical Symptom Verdict Report - Private & Secured Log", 20, 35);
+
+    // Divider Line
+    doc.setDrawColor(226, 232, 240);
+    doc.line(20, 50, 190, 50);
+
+    // Section: Patient Metadata
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("PATIENT DEMOGRAPHICS", 20, 62);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Family Profile: ${record.profile || 'Self'}`, 25, 70);
+    doc.text(`Age: ${record.age} Years`, 25, 77);
+    doc.text(`Gender: ${record.gender}`, 25, 84);
+    doc.text(`Reported Date: ${new Date(record.timestamp || Date.now()).toLocaleString()}`, 25, 91);
+
+    // Section: Symptoms
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("REPORTED SYMPTOMS", 20, 104);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const splitSymptoms = doc.splitTextToSize(record.symptoms || '', 160);
+    doc.text(splitSymptoms, 25, 112);
+
+    // Section: Diagnostic Verdict
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("DIAGNOSTIC VERDICT", 20, 134);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Risk Triage Level: ${record.risk || 'Normal'}`, 25, 142);
+    doc.text(`Calculated Urgency Score: ${record.risk_score || 20} / 100`, 25, 149);
+    doc.text(`Suggested Specialist: ${record.doctor || 'General Physician'}`, 25, 156);
+    doc.text(`Scheduling Helpline: ${record.contact || 'N/A'}`, 25, 163);
+
+    // Section: Directives
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("CLINICAL DIRECTIVES & ADVICE", 20, 176);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const splitAdvice = doc.splitTextToSize(record.advice || '', 160);
+    doc.text(splitAdvice, 25, 184);
+
+    // Section: Remedies
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("HOME CARE & OTC PHARMACOLOGICAL GUIDELINES", 20, 206);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const splitRemedies = doc.splitTextToSize(record.home_remedies || '', 160);
+    doc.text(splitRemedies, 25, 214);
+
+    // Disclaimer
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    const splitDisclaimer = doc.splitTextToSize("Regulatory Disclaimer: This is an automated rule-based advisory triage matching document. It does NOT serve as an official prescription or absolute diagnostic verdict. For emergency symptoms, immediately call 108 / 112 or visit the nearest emergency care department.", 170);
+    doc.text(splitDisclaimer, 20, 268);
+
+    doc.save(`MediGuard_Report_${record.profile || 'Self'}_${Date.now()}.pdf`);
   };
 
   // Fetch agent chat logs history
@@ -1614,8 +2011,11 @@ function App() {
     // Check if session token already exists
     if (token) {
       setCurrentView('DASHBOARD');
-      fetchHistory(token);
+      fetchHistory(token, profileFilter);
       fetchChatHistory(token);
+      fetchLabReports(token, profileFilter);
+      fetchMedicalReports(token, profileFilter);
+      fetchDashboardStats(token);
     }
     
     const interval = setInterval(() => {
@@ -1623,6 +2023,26 @@ function App() {
     }, 15000);
     return () => clearInterval(interval);
   }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      fetchHistory(token, profileFilter);
+      fetchLabReports(token, profileFilter);
+      fetchMedicalReports(token, profileFilter);
+    }
+  }, [profileFilter, token]);
+
+  useEffect(() => {
+    if (token) {
+      if (dashboardTab === 'LAB') {
+        fetchLabReports(token, profileFilter);
+      } else if (dashboardTab === 'REPORTS') {
+        fetchMedicalReports(token, profileFilter);
+      } else if (dashboardTab === 'DASHBOARD') {
+        fetchDashboardStats(token);
+      }
+    }
+  }, [dashboardTab, token]);
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -2290,16 +2710,80 @@ function App() {
         {/* VIEW 4: DIAGNOSTIC DASHBOARD (LOGGED-IN VIEW) */}
         {currentView === 'DASHBOARD' && (
           <div className="dashboard-wrapper-3d animate-fade-in">
-            
+            {/* Dashboard Header with Profile Selector */}
+            <div className="dashboard-header-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '0.8rem 1.2rem', border: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                  {translations[language].profileLabel}:
+                </span>
+                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                  {profiles.map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`gender-segment-btn ${selectedProfile === p ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedProfile(p);
+                        setProfileFilter(p);
+                      }}
+                      style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem', borderRadius: '6px' }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                  {translations[language].filterProfileLabel}:
+                </span>
+                <select
+                  value={profileFilter}
+                  onChange={(e) => setProfileFilter(e.target.value)}
+                  className="map-select-input"
+                  style={{ minWidth: '120px', padding: '0.35rem 0.5rem', fontSize: '0.8rem', height: 'auto', borderRadius: '6px' }}
+                >
+                  <option value="">{translations[language].allProfiles}</option>
+                  {profiles.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {/* Dashboard Sub-navigation Tabs */}
-            <div className="dashboard-navigation-tabs">
+            <div className="dashboard-navigation-tabs" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
               <button 
+                type="button"
                 className={`tab-navigation-btn ${dashboardTab === 'ANALYZER' ? 'active' : ''}`}
                 onClick={() => setDashboardTab('ANALYZER')}
               >
                 {translations[language].tabAnalyzer}
               </button>
               <button 
+                type="button"
+                className={`tab-navigation-btn ${dashboardTab === 'LAB' ? 'active' : ''}`}
+                onClick={() => setDashboardTab('LAB')}
+              >
+                {translations[language].tabLabAnalyzer}
+              </button>
+              <button 
+                type="button"
+                className={`tab-navigation-btn ${dashboardTab === 'REPORTS' ? 'active' : ''}`}
+                onClick={() => setDashboardTab('REPORTS')}
+              >
+                {translations[language].tabReportStorage}
+              </button>
+              <button 
+                type="button"
+                className={`tab-navigation-btn ${dashboardTab === 'DASHBOARD' ? 'active' : ''}`}
+                onClick={() => setDashboardTab('DASHBOARD')}
+              >
+                {translations[language].tabDashboard}
+              </button>
+              <button 
+                type="button"
                 className={`tab-navigation-btn ${dashboardTab === 'CHATBOT' ? 'active' : ''}`}
                 onClick={() => {
                   setDashboardTab('CHATBOT');
@@ -2308,457 +2792,1211 @@ function App() {
               >
                 {translations[language].tabChatbot}
               </button>
+              <button 
+                type="button"
+                className={`tab-navigation-btn ${dashboardTab === 'EMERGENCY' ? 'active' : ''}`}
+                onClick={() => setDashboardTab('EMERGENCY')}
+              >
+                {translations[language].tabEmergency}
+              </button>
             </div>
 
-            {dashboardTab === 'ANALYZER' ? (
+            {/* TAB 1: Symptom Analyzer */}
+            {dashboardTab === 'ANALYZER' && (
               <div className="grid-layout">
-                
                 {/* Left Panel: Analyzer Form */}
                 <div className="analyzer-panel">
+                  <section className="glass-card main-card-3d">
+                    <div className="card-glow-border"></div>
+                    <div className="card-header">
+                      <h2>{translations[language].analyzerTitle}</h2>
+                      <p className="subtitle">{translations[language].analyzerSubtitle}</p>
+                    </div>
 
-              <section className="glass-card main-card-3d">
-                <div className="card-glow-border"></div>
-                <div className="card-header">
-                  <h2>{translations[language].analyzerTitle}</h2>
-                  <p className="subtitle">{translations[language].analyzerSubtitle}</p>
+                    <form onSubmit={handleAnalyze} className="analyzer-form">
+                      {/* Age & Gender Demographics */}
+                      <div className="demographics-row-3d">
+                        <div className="form-group-age-3d">
+                          <label htmlFor="patient-age" className="age-label-3d">
+                            {translations[language].patientAgeLabel}{" "}
+                            <strong className="primary-text">
+                              {age} {translations[language].years}
+                            </strong>
+                          </label>
+                          <div className="age-input-wrapper-3d">
+                            <input
+                              id="patient-age"
+                              type="range"
+                              min="1"
+                              max="100"
+                              value={age}
+                              onChange={(e) => setAge(parseInt(e.target.value))}
+                              className="age-slider-3d"
+                              style={{
+                                background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${age}%, var(--border-color) ${age}%, var(--border-color) 100%)`
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="form-group-gender-3d">
+                          <label className="gender-label-3d">
+                            {translations[language].patientGenderLabel}
+                          </label>
+                          <div className="gender-segmented-control">
+                            <button
+                              type="button"
+                              className={`gender-segment-btn ${gender === 'male' ? 'active' : ''}`}
+                              onClick={() => setGender('male')}
+                            >
+                              {translations[language].genderMale}
+                            </button>
+                            <button
+                              type="button"
+                              className={`gender-segment-btn ${gender === 'female' ? 'active' : ''}`}
+                              onClick={() => setGender('female')}
+                            >
+                              {translations[language].genderFemale}
+                            </button>
+                            <button
+                              type="button"
+                              className={`gender-segment-btn ${gender === 'other' ? 'active' : ''}`}
+                              onClick={() => setGender('other')}
+                            >
+                              {translations[language].genderOther}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dynamic Avatar display */}
+                      <div className="dynamic-avatar-box">
+                        <span className={`dynamic-avatar-emoji age-category-${age <= 12 ? 'child' : age >= 65 ? 'elder' : 'adult'}`}>
+                          {(() => {
+                            if (age <= 12) {
+                              if (gender === 'male') return '👦';
+                              if (gender === 'female') return '👧';
+                              return '👶';
+                            } else if (age >= 65) {
+                              if (gender === 'male') return '👴';
+                              if (gender === 'female') return '👵';
+                              return '🧓';
+                            } else {
+                              if (gender === 'male') return '👨';
+                              if (gender === 'female') return '👩';
+                              return '🧑';
+                            }
+                          })()}
+                        </span>
+                        <div className="avatar-info-panel">
+                          <span className="avatar-category-name">
+                            {age <= 12 ? translations[language].childAvatar : age >= 65 ? translations[language].seniorAvatar : translations[language].adultAvatar}
+                          </span>
+                          <span className="avatar-category-range">
+                            {age <= 12 ? translations[language].childRange : age >= 65 ? translations[language].seniorRange : translations[language].adultRange}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Symptom Input Textarea with Mic */}
+                      <div className="textarea-container-3d">
+                        <label htmlFor="symptom-input" className="symptom-label-3d">
+                          {translations[language].describeSymptomsLabel}
+                        </label>
+                        <div className="textarea-inner-wrapper" style={{ position: 'relative' }}>
+                          <textarea
+                            id="symptom-input"
+                            value={symptoms}
+                            onChange={(e) => setSymptoms(e.target.value)}
+                            placeholder={translations[language].symptomsPlaceholder}
+                            className="symptom-textarea-3d"
+                            rows="4"
+                          />
+                          <div className="textarea-actions-row" style={{ position: 'absolute', bottom: '10px', right: '10px', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              className={`voice-mic-btn-3d ${isListening ? 'listening' : ''}`}
+                              onClick={startSpeechRecognition}
+                              title={translations[language].voiceInputTooltip}
+                              style={{
+                                background: isListening ? 'rgba(225, 29, 72, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                border: isListening ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                                borderRadius: '50%',
+                                width: '32px',
+                                height: '32px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                color: isListening ? 'var(--primary)' : 'var(--text-secondary)',
+                                boxShadow: isListening ? '0 0 10px rgba(225, 29, 72, 0.4)' : 'none',
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              {isListening ? (
+                                <span className="mic-animation" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', animation: 'pulse 1.2s infinite' }}></span>
+                              ) : (
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '1rem', height: '1rem' }}>
+                                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                  <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
+                                </svg>
+                              )}
+                            </button>
+                            {symptoms && (
+                              <button 
+                                type="button" 
+                                className="clear-button-3d" 
+                                onClick={() => setSymptoms('')}
+                                title="Clear input"
+                                style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {errorMessage && <div className="error-alert-3d">⚠️ {errorMessage}</div>}
+
+                      {/* Action Submission and Presets */}
+                      <div className="action-presets-split-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.2rem', marginTop: '0.8rem', alignItems: 'start' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: '800', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                            {translations[language].runEngine}
+                          </span>
+                          <button 
+                            type="submit" 
+                            className="submit-btn-3d" 
+                            disabled={loading}
+                            style={{ width: '100%', padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))', border: 'none', minHeight: '48px' }}
+                          >
+                            {loading ? (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                <span className="spinner"></span>
+                                {translations[language].analyzingText}
+                              </span>
+                            ) : (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.95rem' }}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: '1.1rem', height: '1.1rem' }}>
+                                  <polygon points="5 3 19 12 5 21 5 3" />
+                                </svg>
+                                {translations[language].analyzeBtn}
+                              </span>
+                            )}
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: '800', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                            {translations[language].presetsLabel}
+                          </span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                            {quickTags.map((tag, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                className="tag-btn-3d"
+                                onClick={() => handleTagClick(tag.value)}
+                                style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', borderRadius: '6px', whiteSpace: 'nowrap' }}
+                              >
+                                {translations[language][tag.key]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </form>
+                  </section>
                 </div>
 
-                <form onSubmit={handleAnalyze} className="analyzer-form">
-                  
-                  {/* Age Input with Interactive Range Slider and Segmented Gender Controls */}
-                  <div className="demographics-row-3d">
-                    
-                    <div className="form-group-age-3d">
-                      <label htmlFor="patient-age" className="age-label-3d">{translations[language].patientAgeLabel} <strong className="primary-text">{age} {translations[language].years}</strong></label>
-                      <div className="age-input-wrapper-3d">
-                        <input
-                          id="patient-age"
-                          type="range"
-                          min="1"
-                          max="100"
-                          value={age}
-                          onChange={(e) => setAge(parseInt(e.target.value))}
-                          className="age-slider-3d"
-                          style={{
-                            background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${age}%, var(--border-color) ${age}%, var(--border-color) 100%)`
-                          }}
-                        />
+                {/* Right Panel: Result Verdict OR Case Logs */}
+                <div className="history-panel">
+                  {result ? (
+                    <section className={`glass-card result-card-3d ${result.risk}-glow-active`} style={{ marginBottom: 0 }}>
+                      <div className="result-header-premium" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-primary)', margin: 0 }}>
+                            {translations[language].diagnosticVerdictTitle}
+                          </h3>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            {translations[language].diagnosticVerdictSub}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => exportReportToPDF(result)}
+                            className="gps-btn"
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.7rem', fontSize: '0.8rem', borderRadius: '6px', background: 'var(--primary)', color: 'white', border: 'none', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            🖨️ {translations[language].exportReportBtn}
+                          </button>
+                          <button 
+                            className="clear-button-3d" 
+                            type="button"
+                            onClick={() => setResult(null)} 
+                            title="Clear Result" 
+                            style={{ position: 'static', background: 'var(--bg-primary)', border: '1.5px solid var(--border-color)', padding: '0.25rem 0.5rem', borderRadius: '6px' }}
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="form-group-gender-3d">
-                      <label className="gender-label-3d">{translations[language].patientGenderLabel}</label>
-                      <div className="gender-segmented-control">
-                        <button
-                          type="button"
-                          className={`gender-segment-btn ${gender === 'male' ? 'active' : ''}`}
-                          onClick={() => setGender('male')}
-                        >
-                          {translations[language].genderMale}
-                        </button>
-                        <button
-                          type="button"
-                          className={`gender-segment-btn ${gender === 'female' ? 'active' : ''}`}
-                          onClick={() => setGender('female')}
-                        >
-                          {translations[language].genderFemale}
-                        </button>
-                        <button
-                          type="button"
-                          className={`gender-segment-btn ${gender === 'other' ? 'active' : ''}`}
-                          onClick={() => setGender('other')}
-                        >
-                          {translations[language].genderOther}
-                        </button>
+                      {/* Donut risk Score & Reason justifications */}
+                      <div style={{ display: 'flex', gap: '1.2rem', flexWrap: 'wrap', marginBottom: '1.2rem', alignItems: 'stretch' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.8rem 1.2rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '12px', border: '1px solid var(--border-color)', flex: '1', minWidth: '150px' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+                            {translations[language].riskScoreLabel}
+                          </span>
+                          <div style={{ position: 'relative', width: '90px', height: '90px' }}>
+                            <svg width="90" height="90" viewBox="0 0 100 100">
+                              <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="8" />
+                              <circle cx="50" cy="50" r="42" fill="none" 
+                                      stroke={result.risk === 'Emergency' ? 'var(--emergency-border)' : result.risk === 'Urgent' ? 'var(--urgent-border)' : 'var(--normal-border)'} 
+                                      strokeWidth="8" 
+                                      strokeDasharray={`${2 * Math.PI * 42}`}
+                                      strokeDashoffset={`${2 * Math.PI * 42 * (1 - (result.risk_score || 0) / 100)}`}
+                                      strokeLinecap="round"
+                                      transform="rotate(-90 50 50)"
+                                      style={{ transition: 'stroke-dashoffset 0.8s ease-in-out' }}
+                              />
+                            </svg>
+                            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <span style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-primary)' }}>{result.risk_score || 20}</span>
+                              <span style={{ fontSize: '0.55rem', textTransform: 'uppercase', fontWeight: '700', color: result.risk === 'Emergency' ? 'var(--emergency-text)' : result.risk === 'Urgent' ? 'var(--urgent-text)' : 'var(--normal-text)' }}>
+                                {translateText(result.risk, language)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {result.risk_reasons && result.risk_reasons.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', flex: '2', minWidth: '220px', padding: '0.8rem 1rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
+                              {translations[language].reasonsLabel}
+                            </span>
+                            <ul style={{ paddingLeft: '1.1rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                              {result.risk_reasons.map((reason, idx) => (
+                                <li key={idx} style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{reason}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
-                    </div>
 
-                  </div>
+                      {/* Verdict routing block */}
+                      <div className="clinical-compartment verdict-scheduling-compartment" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                        <div className="compartment-header">
+                          <span className="icon-pulse">⚕️</span>
+                          <h3>{translations[language].clinicalVerdictRouting}</h3>
+                        </div>
+                        <div className="verdict-grid">
+                          <div className="specialist-suggestion-3d">
+                            <span className="body-label-3d">{translations[language].suggestedSpecialistLabel}</span>
+                            <p className="doctor-name-3d">{translateText(result.doctor, language)}</p>
+                          </div>
+                          {result.contact && (
+                            <div className="contact-suggestion-3d">
+                              <h4>{translations[language].hotlineAppointmentLabel}</h4>
+                              <p className="contact-phone-3d">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="phone-icon-3d">
+                                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                                </svg>
+                                <a href={`tel:${result.contact.split(' ')[0]}`} className="phone-link-3d">
+                                  {result.contact}
+                                </a>
+                              </p>
+                            </div>
+                          )}
+                        </div>
 
-                  {/* Dynamic gender-aware demographic card avatar */}
-                  <div className="dynamic-avatar-box">
-                    <span className={`dynamic-avatar-emoji age-category-${age <= 12 ? 'child' : age >= 65 ? 'elder' : 'adult'}`}>
-                      {(() => {
-                        if (age <= 12) {
-                          if (gender === 'male') return '👦';
-                          if (gender === 'female') return '👧';
-                          return '👶';
-                        } else if (age >= 65) {
-                          if (gender === 'male') return '👴';
-                          if (gender === 'female') return '👵';
-                          return '🧓';
-                        } else {
-                          if (gender === 'male') return '👨';
-                          if (gender === 'female') return '👩';
-                          return '🧑';
-                        }
-                      })()}
-                    </span>
-                    <div className="avatar-info-panel">
-                      <span className="avatar-category-name">
-                        {age <= 12 ? translations[language].childAvatar : age >= 65 ? translations[language].seniorAvatar : translations[language].adultAvatar}
-                      </span>
-                      <span className="avatar-category-range">
-                        {age <= 12 ? translations[language].childRange : age >= 65 ? translations[language].seniorRange : translations[language].adultRange}
-                      </span>
-                    </div>
-                  </div>
+                        {result.risk === 'Emergency' && (
+                          <div className="emergency-alert-3d" style={{ marginTop: '0.8rem' }}>
+                            <div className="emergency-icon-container-3d">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="emergency-icon-3d">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                              </svg>
+                            </div>
+                            <p className="emergency-text-3d">{translations[language].emergencyWarningText}</p>
+                          </div>
+                        )}
 
-                  {/* Symptoms Textarea */}
-                  <div className="textarea-container-3d">
-                    <label htmlFor="symptom-input" className="symptom-label-3d">{translations[language].describeSymptomsLabel}</label>
-                    <div className="textarea-inner-wrapper">
-                      <textarea
-                        id="symptom-input"
-                        value={symptoms}
-                        onChange={(e) => setSymptoms(e.target.value)}
-                        placeholder={translations[language].symptomsPlaceholder}
-                        className="symptom-textarea-3d"
-                        rows="4"
-                      />
-                      {symptoms && (
+                        <div className="result-actions-3d" style={{ marginTop: '1rem' }}>
+                          <OpenStreetMapComponent doctorSpecialist={result.doctor} language={language} />
+                        </div>
+                      </div>
+
+                      {/* Home care guidelines advice */}
+                      <div className="clinical-compartment home-care-compartment" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '1rem' }}>
+                        <div className="compartment-header">
+                          <span className="icon-pulse">💊</span>
+                          <h3>{translations[language].treatmentGuidelinesLabel}</h3>
+                        </div>
+                        <div className="advice-section-3d">
+                          <h4>{translations[language].directivesAdviceLabel}</h4>
+                          <p className="advice-text-3d">{translateText(result.advice, language)}</p>
+                        </div>
+                        {result.home_remedies && (
+                          <div className="home-remedies-section-3d" style={{ marginTop: '0.8rem' }}>
+                            <h4>{translations[language].standardHomeCareLabel}</h4>
+                            <div className="remedies-container-3d">
+                              {translateText(result.home_remedies, language).split('\n').map((line, idx) => {
+                                const isCaution = line.trim().startsWith('*');
+                                return (
+                                  <p key={idx} className={isCaution ? 'remedy-caution-3d' : 'remedy-line-3d'}>
+                                    {isCaution ? line.replace(/^\*\s*/, '') : line}
+                                  </p>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  ) : (
+                    /* Diagnostics history list */
+                    <section className="glass-card history-card-container-3d">
+                      <div className="card-glow-border"></div>
+                      <div className="history-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3>{translations[language].personalHistoryHeader}</h3>
                         <button 
-                          type="button" 
+                          type="button"
+                          className="refresh-btn-3d" 
+                          onClick={() => fetchHistory(token)} 
+                          title="Refresh cases"
+                          aria-label="Refresh"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div className="history-list">
+                        {history.length === 0 ? (
+                          <div className="empty-history">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="empty-icon">
+                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                              <line x1="16" y1="2" x2="16" y2="6" />
+                              <line x1="8" y1="2" x2="8" y2="6" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            <p>{translations[language].noCaseRecords}</p>
+                            <p className="subtext">{translations[language].completedLogsDesc}</p>
+                          </div>
+                        ) : (
+                          history.map((item) => (
+                            <div key={item._id} className="history-item-3d" style={{ position: 'relative' }}>
+                              <div className="history-item-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                  <span className={`mini-badge-3d ${item.risk}`}>{translateText(item.risk, language)}</span>
+                                  <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '0.15rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                    👤 {item.profile || 'Self'}
+                                  </span>
+                                  {item.risk_score && (
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700' }}>
+                                      Score: {item.risk_score}/100
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="history-time">{formatTime(item.timestamp)}</span>
+                              </div>
+                              <div className="history-item-body" style={{ marginTop: '0.5rem' }}>
+                                <p className="history-symptoms">
+                                  <strong>{translations[language].historySymptomsLabel}</strong> {item.symptoms}{" "}
+                                  {item.age !== undefined && (
+                                    <span className="history-item-age-3d">
+                                      ({item.gender === 'female' ? '👩' : item.gender === 'male' ? '👨' : '🧑'} {item.age} {translations[language].historyYrs})
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="history-suggestion">
+                                  <strong>{translations[language].historySpecialistLabel}</strong> {translateText(item.doctor, language)}
+                                </p>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.4rem' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => exportReportToPDF(item)}
+                                  className="clinic-locate-btn"
+                                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.2rem', borderRadius: '4px' }}
+                                >
+                                  🖨️ PDF
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </section>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: Lab Value Analyzer */}
+            {dashboardTab === 'LAB' && (
+              <div className="grid-layout">
+                {/* Left Panel: Lab metrics inputs */}
+                <div className="analyzer-panel">
+                  <section className="glass-card main-card-3d">
+                    <div className="card-glow-border"></div>
+                    <div className="card-header">
+                      <h2>🧪 Lab Value Analyzer</h2>
+                      <p className="subtitle">Enter patient lab parameters to verify metrics and receive rule-based clinical recommendations instantly.</p>
+                    </div>
+
+                    <form onSubmit={handleLabAnalyze} className="analyzer-form" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.8rem' }}>
+                        <div className="form-group-3d">
+                          <label>Hemoglobin (g/dL):</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="e.g. 14.2"
+                            value={labHemoglobin}
+                            onChange={(e) => setLabHemoglobin(e.target.value)}
+                            className="auth-input-3d"
+                            required
+                          />
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Ref: F (12.1-15.1), M (13.8-17.2)</span>
+                        </div>
+
+                        <div className="form-group-3d">
+                          <label>WBC Count (cells/mcL):</label>
+                          <input
+                            type="number"
+                            step="1"
+                            placeholder="e.g. 6500"
+                            value={labWbc}
+                            onChange={(e) => setLabWbc(e.target.value)}
+                            className="auth-input-3d"
+                            required
+                          />
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Ref: 4,000 - 11,000</span>
+                        </div>
+
+                        <div className="form-group-3d">
+                          <label>Platelet Count (cells/mcL):</label>
+                          <input
+                            type="number"
+                            step="1"
+                            placeholder="e.g. 250000"
+                            value={labPlatelets}
+                            onChange={(e) => setLabPlatelets(e.target.value)}
+                            className="auth-input-3d"
+                            required
+                          />
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Ref: 150,000 - 450,000</span>
+                        </div>
+
+                        <div className="form-group-3d">
+                          <label>Fasting Blood Sugar (mg/dL):</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="e.g. 92.5"
+                            value={labSugar}
+                            onChange={(e) => setLabSugar(e.target.value)}
+                            className="auth-input-3d"
+                            required
+                          />
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Ref: 70 - 100</span>
+                        </div>
+
+                        <div className="form-group-3d">
+                          <label>Vitamin D3 (ng/mL):</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="e.g. 32.4"
+                            value={labVitaminD}
+                            onChange={(e) => setLabVitaminD(e.target.value)}
+                            className="auth-input-3d"
+                            required
+                          />
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Ref: 30 - 100</span>
+                        </div>
+
+                        <div className="form-group-3d">
+                          <label>Total Cholesterol (mg/dL):</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="e.g. 180"
+                            value={labCholesterol}
+                            onChange={(e) => setLabCholesterol(e.target.value)}
+                            className="auth-input-3d"
+                            required
+                          />
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Ref: &lt; 200</span>
+                        </div>
+
+                        <div className="form-group-3d">
+                          <label>Serum Creatinine (mg/dL):</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="e.g. 0.95"
+                            value={labCreatinine}
+                            onChange={(e) => setLabCreatinine(e.target.value)}
+                            className="auth-input-3d"
+                            required
+                          />
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Ref: F (0.5-1.1), M (0.6-1.2)</span>
+                        </div>
+                      </div>
+
+                      {errorMessage && <div className="error-alert-3d">⚠️ {errorMessage}</div>}
+                      {successMessage && <div className="success-alert-3d">✓ {successMessage}</div>}
+
+                      <button type="submit" className="submit-btn-3d" disabled={labLoading} style={{ marginTop: '0.5rem', width: '100%', minHeight: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {labLoading ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            <span className="spinner"></span> Evaluating...
+                          </span>
+                        ) : (
+                          <span>Analyze Lab Metrics 🧪</span>
+                        )}
+                      </button>
+                    </form>
+                  </section>
+                </div>
+
+                {/* Right Panel: Active Result OR saved logs list */}
+                <div className="history-panel">
+                  {labResult ? (
+                    <section className="glass-card result-card-3d Normal-glow-active" style={{ marginBottom: 0 }}>
+                      <div className="result-header-premium" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-primary)', margin: 0 }}>📋 Lab Report Verdict</h3>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Calculated ranges & standard metrics</span>
+                        </div>
+                        <button 
                           className="clear-button-3d" 
-                          onClick={() => setSymptoms('')}
-                          title="Clear input"
+                          type="button"
+                          onClick={() => setLabResult(null)}
+                          style={{ position: 'static', background: 'var(--bg-primary)', border: '1.5px solid var(--border-color)', padding: '0.25rem 0.5rem', borderRadius: '6px' }}
                         >
                           ✕
                         </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {errorMessage && <div className="error-alert-3d">⚠️ {errorMessage}</div>}
-
-                  {/* Two-Column action & presets layout directly below description */}
-                  <div className="action-presets-split-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.2rem', marginTop: '0.8rem', alignItems: 'start' }}>
-                    
-                    {/* Left side: Submit button */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: '800', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{translations[language].runEngine}</span>
-                      <button 
-                        type="submit" 
-                        className="submit-btn-3d" 
-                        disabled={loading}
-                        style={{ width: '100%', padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))', border: 'none', transition: 'all 0.2s ease', minHeight: '48px' }}
-                      >
-                        {loading ? (
-                          <span className="loader-container" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                            <span className="spinner"></span>
-                            {translations[language].analyzingText}
-                          </span>
-                        ) : (
-                          <span className="btn-content" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.95rem' }}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: '1.1rem', height: '1.1rem' }}>
-                              <polygon points="5 3 19 12 5 21 5 3" />
-                            </svg>
-                            {translations[language].analyzeBtn}
-                          </span>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Right side: Quick Presets */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: '800', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{translations[language].presetsLabel}</span>
-                      <div className="tags-list-3d" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                        {quickTags.map((tag, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            className="tag-btn-3d"
-                            onClick={() => handleTagClick(tag.value)}
-                            style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem', borderRadius: '6px', whiteSpace: 'nowrap' }}
-                          >
-                            {translations[language][tag.key]}
-                          </button>
-                        ))}
                       </div>
-                    </div>
 
-                  </div>
-                </form>
-              </section>
-            </div>
-
-            {/* Right Panel: Result OR History Logs */}
-            <div className="history-panel">
-              {result ? (
-                /* Analysis Result Card - Formatted Clinical Compartments */
-                <section className={`glass-card result-card-3d ${result.risk}-glow-active`} style={{ marginBottom: 0 }}>
-                  
-                  {/* Premium Diagnostic Header */}
-                  <div className="result-header-premium" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                      <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-primary)', margin: 0 }}>{translations[language].diagnosticVerdictTitle}</h3>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{translations[language].diagnosticVerdictSub}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <span className={`mini-badge-3d ${result.risk}`} style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', fontWeight: '800' }}>
-                        {result.risk === 'Emergency' ? '🚨' : result.risk === 'Urgent' ? '⚠️' : '✅'} {translateText(result.risk, language)} {translations[language].riskBadge}
-                      </span>
-                      <button 
-                        className="clear-button-3d" 
-                        type="button"
-                        onClick={() => setResult(null)} 
-                        title="Clear Result" 
-                        style={{ position: 'static', background: 'var(--bg-primary)', border: '1.5px solid var(--border-color)', padding: '0.25rem 0.5rem', borderRadius: '6px', cursor: 'pointer' }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* COMPARTMENT 2: CLINICAL VERDICT & SCHEDULING */}
-                  <div className="clinical-compartment verdict-scheduling-compartment">
-                    <div className="compartment-header">
-                      <span className="icon-pulse">⚕️</span>
-                      <h3>{translations[language].clinicalVerdictRouting}</h3>
-                    </div>
-                    <div className="verdict-grid">
-                      <div className="specialist-suggestion-3d">
-                        <span className="body-label-3d">{translations[language].suggestedSpecialistLabel}</span>
-                        <p className="doctor-name-3d">{translateText(result.doctor, language)}</p>
-                      </div>
-                      {result.contact && (
-                        <div className="contact-suggestion-3d">
-                          <h4>{translations[language].hotlineAppointmentLabel}</h4>
-                          <p className="contact-phone-3d">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="phone-icon-3d">
-                              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                            </svg>
-                            <a href={`tel:${result.contact.split(' ')[0]}`} className="phone-link-3d">
-                              {result.contact}
-                            </a>
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {result.risk === 'Emergency' && (
-                      <div className="emergency-alert-3d">
-                        <div className="emergency-icon-container-3d">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="emergency-icon-3d">
-                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                            <line x1="12" y1="9" x2="12" y2="13" />
-                            <line x1="12" y1="17" x2="12.01" y2="17" />
-                          </svg>
-                        </div>
-                        <p className="emergency-text-3d">
-                          {translations[language].emergencyWarningText}
-                        </p>
-                      </div>
-                    )}
-                    
-                    <div className="result-actions-3d" style={{ flexDirection: 'column', gap: '1.2rem', alignItems: 'stretch', width: '100%' }}>
-                      <OpenStreetMapComponent doctorSpecialist={result.doctor} language={language} />
-                    </div>
-                  </div>
-
-                  {/* COMPARTMENT 3: TREATMENT & HOME CARE ALERTS */}
-                  <div className="clinical-compartment home-care-compartment">
-                    <div className="compartment-header">
-                      <span className="icon-pulse">💊</span>
-                      <h3>{translations[language].treatmentGuidelinesLabel}</h3>
-                    </div>
-                    <div className="advice-section-3d">
-                      <h4>{translations[language].directivesAdviceLabel}</h4>
-                      <p className="advice-text-3d">{translateText(result.advice, language)}</p>
-                    </div>
-
-                    {result.home_remedies && (
-                      <div className="home-remedies-section-3d">
-                        <h4>{translations[language].standardHomeCareLabel}</h4>
-                        <div className="remedies-container-3d">
-                          {translateText(result.home_remedies, language).split('\n').map((line, idx) => {
-                            const isCaution = line.trim().startsWith('*');
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem' }}>
+                          {Object.entries(labResult.results || {}).map(([metric, meta]) => {
+                            const status = meta.status;
+                            const isNormal = status === 'Normal';
                             return (
-                              <p key={idx} className={isCaution ? 'remedy-caution-3d' : 'remedy-line-3d'}>
-                                {isCaution ? line.replace(/^\*\s*/, '') : line}
-                              </p>
+                              <div key={metric} style={{ background: 'rgba(255,255,255,0.02)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'capitalize', fontWeight: '800' }}>{metric}</span>
+                                <span style={{ fontSize: '0.95rem', fontWeight: '800', color: isNormal ? 'var(--accent)' : status.includes('High') ? '#f87171' : '#f59e0b' }}>{status}</span>
+                                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>Range: {meta.range}</span>
+                              </div>
                             );
                           })}
                         </div>
+
+                        <div className="clinical-compartment" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.8rem', marginTop: '0.4rem' }}>
+                          <h4 style={{ fontSize: '0.8rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Overall Verdict</h4>
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{labResult.verdict}</p>
+                        </div>
+
+                        {labResult.recommendations && labResult.recommendations.length > 0 && (
+                          <div className="clinical-compartment" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.8rem' }}>
+                            <h4 style={{ fontSize: '0.8rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Dietary & Lifestyle Advice</h4>
+                            <ul style={{ paddingLeft: '1.2rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                              {labResult.recommendations.map((rec, idx) => (
+                                <li key={idx} style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{rec}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </section>
+                  ) : (
+                    <section className="glass-card history-card-container-3d">
+                      <div className="card-glow-border"></div>
+                      <div className="history-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3>Lab Evaluation History</h3>
+                        <button 
+                          type="button"
+                          className="refresh-btn-3d" 
+                          onClick={() => fetchLabReports(token)}
+                          aria-label="Refresh Reports"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                          </svg>
+                        </button>
+                      </div>
 
-                </section>
-              ) : (
-                /* History Logs */
-                <section className="glass-card history-card-container-3d">
-                  <div className="card-glow-border"></div>
-                  <div className="history-header">
-                    <h3>Personal Diagnosis History</h3>
-                    <button 
-                      className="refresh-btn-3d" 
-                      onClick={() => fetchHistory(token)} 
-                      title="Refresh cases"
-                      aria-label="Refresh"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-                      </svg>
-                    </button>
-                  </div>
+                      <div className="history-list">
+                        {labReports.length === 0 ? (
+                          <div className="empty-history">
+                            <span style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🧪</span>
+                            <p>No lab evaluations recorded.</p>
+                            <p className="subtext">Add a lab value evaluation log to store it securely in MongoDB.</p>
+                          </div>
+                        ) : (
+                          labReports.map((report) => (
+                            <div key={report._id} className="history-item-3d">
+                              <div className="history-item-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                  <span className="mini-badge-3d Normal" style={{ background: 'rgba(34,211,238,0.1)', color: '#22d3ee' }}>🧪 Verified Lab Report</span>
+                                  <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '0.15rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                    👤 {report.profile || 'Self'}
+                                  </span>
+                                </div>
+                                <span className="history-time">{formatTime(report.timestamp)}</span>
+                              </div>
+                              <div className="history-item-body" style={{ marginTop: '0.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '0.3rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                  <div>Hb: <strong>{report.metrics?.hemoglobin}</strong></div>
+                                  <div>WBC: <strong>{report.metrics?.wbc}</strong></div>
+                                  <div>Plt: <strong>{report.metrics?.platelets}</strong></div>
+                                  <div>Sug: <strong>{report.metrics?.sugar}</strong></div>
+                                  <div>VitD: <strong>{report.metrics?.vitamin_d}</strong></div>
+                                  <div>Chol: <strong>{report.metrics?.cholesterol}</strong></div>
+                                  <div>Crt: <strong>{report.metrics?.creatinine}</strong></div>
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.4rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.3rem' }}>
+                                  <strong>Verdict:</strong> {report.verdict}
+                                </p>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.4rem' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteLabReport(report._id)}
+                                  className="clinic-locate-btn"
+                                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', borderRadius: '4px' }}
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </section>
+                  )}
+                </div>
+              </div>
+            )}
 
-                  <div className="history-list">
-                    {history.length === 0 ? (
-                      <div className="empty-history">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="empty-icon">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                          <line x1="16" y1="2" x2="16" y2="6" />
-                          <line x1="8" y1="2" x2="8" y2="6" />
-                          <line x1="3" y1="10" x2="21" y2="10" />
+            {/* TAB 3: Medical Report Storage */}
+            {dashboardTab === 'REPORTS' && (
+              <div className="grid-layout">
+                {/* Left Panel: File Selection */}
+                <div className="analyzer-panel">
+                  <section className="glass-card main-card-3d">
+                    <div className="card-glow-border"></div>
+                    <div className="card-header">
+                      <h2>📂 Medical Report Storage</h2>
+                      <p className="subtitle">Upload and store PDF or image scans of your health prescriptions and medical diagnostics securely. Access or delete them anytime.</p>
+                    </div>
+
+                    <form onSubmit={handleUploadReport} className="analyzer-form">
+                      <div className="form-group-3d">
+                        <label htmlFor="report-file-input">Select Medical Report File (PDF/Image):</label>
+                        <div 
+                          className="file-upload-drag-area"
+                          onClick={() => document.getElementById('report-file-input').click()}
+                          style={{
+                            border: '2px dashed var(--border-color)',
+                            background: 'rgba(255,255,255,0.01)',
+                            borderRadius: '12px',
+                            padding: '2rem 1rem',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            marginTop: '0.5rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                          }}
+                        >
+                          <span style={{ fontSize: '2.5rem' }}>📤</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                            {uploadFile ? uploadFile.name : "Click or drag report here to upload"}
+                          </span>
+                          {uploadFile && (
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                              Size: {(uploadFile.size / 1024).toFixed(1)} KB
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          id="report-file-input"
+                          type="file"
+                          style={{ display: 'none' }}
+                          accept="image/*,application/pdf,text/plain"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setUploadFile(e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {errorMessage && <div className="error-alert-3d" style={{ marginTop: '0.8rem' }}>⚠️ {errorMessage}</div>}
+                      {successMessage && <div className="success-alert-3d" style={{ marginTop: '0.8rem' }}>✓ {successMessage}</div>}
+
+                      <button type="submit" className="submit-btn-3d" disabled={uploadLoading || !uploadFile} style={{ marginTop: '1rem', width: '100%', minHeight: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {uploadLoading ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            <span className="spinner"></span> Uploading...
+                          </span>
+                        ) : (
+                          <span>Save Report File 📂</span>
+                        )}
+                      </button>
+                    </form>
+                  </section>
+                </div>
+
+                {/* Right Panel: Stored file records list */}
+                <div className="history-panel">
+                  <section className="glass-card history-card-container-3d">
+                    <div className="card-glow-border"></div>
+                    <div className="history-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3>Stored Medical Reports</h3>
+                      <button 
+                        type="button"
+                        className="refresh-btn-3d" 
+                        onClick={() => fetchMedicalReports(token)}
+                        aria-label="Refresh Stored Reports"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
                         </svg>
-                        <p>No recent case records found.</p>
-                        <p className="subtext">Completed logs will register here dynamically.</p>
+                      </button>
+                    </div>
+
+                    <div className="history-list">
+                      {reportsLoading ? (
+                        <div className="empty-history" style={{ padding: '3rem 1rem' }}>
+                          <span className="spinner" style={{ width: '1.5rem', height: '1.5rem' }}></span>
+                          <p style={{ marginTop: '0.5rem' }}>Fetching file records...</p>
+                        </div>
+                      ) : medicalReports.length === 0 ? (
+                        <div className="empty-history">
+                          <span style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📂</span>
+                          <p>No files uploaded yet.</p>
+                          <p className="subtext">Upload PDFs or image diagnostics. Files are stored on-server and linked to your MongoDB logs.</p>
+                        </div>
+                      ) : (
+                        medicalReports.map((report) => (
+                          <div key={report._id} className="history-item-3d" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            <div className="history-item-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                <span className="file-icon" style={{ fontSize: '1.1rem' }}>
+                                  {report.content_type.includes('pdf') ? '📄' : '🖼️'}
+                                </span>
+                                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }} title={report.file_name}>
+                                  {report.file_name}
+                                </span>
+                              </div>
+                              <span className="history-time" style={{ fontSize: '0.65rem' }}>{formatTime(report.timestamp)}</span>
+                            </div>
+                            <div className="history-item-body" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              <span>Profile: <strong>{report.profile || 'Self'}</strong></span>
+                              <span>Size: <strong>{(report.file_size / 1024).toFixed(1)} KB</strong></span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.35rem', marginTop: '0.2rem', borderTop: '1px dashed var(--border-color)', paddingTop: '0.4rem' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleViewReport(report._id, report.file_name, report.content_type)}
+                                className="clinic-locate-btn"
+                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
+                              >
+                                👁️ View
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadReport(report._id, report.file_name)}
+                                className="clinic-locate-btn"
+                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', background: 'var(--primary)', border: 'none', color: 'white' }}
+                              >
+                                📥 Download
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteReport(report._id)}
+                                className="clinic-locate-btn"
+                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: Health Dashboard */}
+            {dashboardTab === 'DASHBOARD' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                {/* Statistics Highlights Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                  <div className="glass-card" style={{ padding: '1rem 1.2rem', display: 'flex', flexDirection: 'column', justify: 'center', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)' }}>📊 Total Evaluations Run</span>
+                    <strong style={{ fontSize: '2.2rem', fontWeight: '800', color: 'var(--text-primary)', marginTop: '0.2rem' }}>{dashboardStats?.total_diagnoses || 0}</strong>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Accumulated symptom checks</span>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '1rem 1.2rem', display: 'flex', flexDirection: 'column', justify: 'center', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: '800', textTransform: 'uppercase', color: '#f87171' }}>🚨 High Risk / Warning Cases</span>
+                    <strong style={{ fontSize: '2.2rem', fontWeight: '800', color: '#f87171', marginTop: '0.2rem' }}>
+                      {((dashboardStats?.risk_statistics?.Urgent || 0) + (dashboardStats?.risk_statistics?.Emergency || 0))}
+                    </strong>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Urgent & Emergency priorities</span>
+                  </div>
+
+                  <div className="glass-card" style={{ padding: '1rem 1.2rem', display: 'flex', flexDirection: 'column', justify: 'center', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--primary)' }}>👤 Family Members Monitored</span>
+                    <strong style={{ fontSize: '2.2rem', fontWeight: '800', color: 'var(--primary)', marginTop: '0.2rem' }}>
+                      {Object.keys(dashboardStats?.profile_statistics || {}).length || 1}
+                    </strong>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Self & relative profile records</span>
+                  </div>
+                </div>
+
+                {/* 6-Month case trend SVG line chart & risk details */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.2rem' }}>
+                  <section className="glass-card" style={{ padding: '1.2rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: '800', textTransform: 'uppercase', marginBottom: '1rem', color: 'var(--text-primary)' }}>📈 6-Month Diagnostics Trend</h3>
+                    {statsLoading ? (
+                      <div style={{ display: 'flex', height: '220px', alignItems: 'center', justifyContent: 'center' }}>
+                        <span className="spinner"></span>
+                      </div>
+                    ) : dashboardStats?.monthly_trend && dashboardStats.monthly_trend.length > 0 ? (() => {
+                      const trend = dashboardStats.monthly_trend;
+                      const maxVal = Math.max(...trend.map(t => t.count), 4);
+                      const w = 480;
+                      const h = 200;
+                      const paddingLeft = 40;
+                      const paddingRight = 20;
+                      const paddingTop = 20;
+                      const paddingBottom = 30;
+                      const chartW = w - paddingLeft - paddingRight;
+                      const chartH = h - paddingTop - paddingBottom;
+                      
+                      const points = trend.map((t, idx) => {
+                        const x = paddingLeft + (idx / (trend.length - 1 || 1)) * chartW;
+                        const y = paddingTop + chartH - (t.count / maxVal) * chartH;
+                        return { x, y, month: t.month, count: t.count };
+                      });
+                      
+                      const linePath = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                      
+                      return (
+                        <div style={{ overflowX: 'auto', width: '100%' }}>
+                          <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} style={{ minWidth: '400px' }}>
+                            {/* SVG Grid lines */}
+                            {[0, 0.25, 0.5, 0.75, 1].map((ratio, rIdx) => {
+                              const y = paddingTop + chartH * ratio;
+                              const val = Math.round(maxVal * (1 - ratio));
+                              return (
+                                <g key={rIdx}>
+                                  <line x1={paddingLeft} y1={y} x2={w - paddingRight} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+                                  <text x={paddingLeft - 10} y={y + 4} fill="var(--text-muted)" fontSize="9" textAnchor="end">{val}</text>
+                                </g>
+                              );
+                            })}
+                            
+                            {/* SVG X axis month labels */}
+                            {points.map((p, pIdx) => (
+                              <text key={pIdx} x={p.x} y={h - 10} fill="var(--text-muted)" fontSize="8.5" textAnchor="middle">{p.month.split(' ')[0]}</text>
+                            ))}
+                            
+                            {/* Graph curve path */}
+                            <path d={linePath} fill="none" stroke="var(--primary)" strokeWidth="2.5" />
+                            
+                            {/* Dot highlights */}
+                            {points.map((p, pIdx) => (
+                              <g key={pIdx}>
+                                <circle cx={p.x} cy={p.y} r="4.5" fill="var(--bg-secondary)" stroke="var(--primary)" strokeWidth="2" />
+                                <circle cx={p.x} cy={p.y} r="2" fill="var(--primary)" />
+                                {p.count > 0 && (
+                                  <text x={p.x} y={p.y - 8} fill="var(--text-primary)" fontSize="9" fontWeight="800" textAnchor="middle">{p.count}</text>
+                                )}
+                              </g>
+                            ))}
+                          </svg>
+                        </div>
+                      );
+                    })() : (
+                      <div style={{ display: 'flex', height: '200px', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>No trend logs found.</div>
+                    )}
+                  </section>
+                  
+                  {/* Common symptoms list */}
+                  <section className="glass-card" style={{ padding: '1.2rem', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div>
+                      <h3 style={{ fontSize: '1rem', fontWeight: '800', textTransform: 'uppercase', marginBottom: '0.6rem', color: 'var(--text-primary)' }}>🚨 Risk Alert Breakdown</h3>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ flex: 1, background: 'rgba(52,211,153,0.1)', border: '1px solid var(--normal-border)', padding: '0.6rem', borderRadius: '8px', textAlign: 'center' }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--normal-text)', textTransform: 'uppercase', fontWeight: '800' }}>Normal</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--normal-text)', marginTop: '0.1rem' }}>{dashboardStats?.risk_statistics?.Normal || 0}</div>
+                        </div>
+                        <div style={{ flex: 1, background: 'rgba(251,191,36,0.1)', border: '1px solid var(--urgent-border)', padding: '0.6rem', borderRadius: '8px', textAlign: 'center' }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--urgent-text)', textTransform: 'uppercase', fontWeight: '800' }}>Urgent</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--urgent-text)', marginTop: '0.1rem' }}>{dashboardStats?.risk_statistics?.Urgent || 0}</div>
+                        </div>
+                        <div style={{ flex: 1, background: 'rgba(248,113,113,0.1)', border: '1px solid var(--emergency-border)', padding: '0.6rem', borderRadius: '8px', textAlign: 'center' }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--emergency-text)', textTransform: 'uppercase', fontWeight: '800' }}>Emergency</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--emergency-text)', marginTop: '0.1rem' }}>{dashboardStats?.risk_statistics?.Emergency || 0}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 style={{ fontSize: '1rem', fontWeight: '800', textTransform: 'uppercase', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>🗣️ Top Reported Symptoms</h3>
+                      {dashboardStats?.common_symptoms && dashboardStats.common_symptoms.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          {dashboardStats.common_symptoms.map((item, index) => (
+                            <div key={index} style={{ display: 'flex', alignItems: 'center', justify: 'space-between', padding: '0.4rem 0.6rem', background: 'rgba(255,255,255,0.02)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                              <span style={{ fontSize: '0.8rem', textTransform: 'capitalize', color: 'var(--text-secondary)' }}>💬 {item.symptom}</span>
+                              <span style={{ fontSize: '0.75rem', fontWeight: '800', background: 'rgba(34,211,238,0.1)', color: '#22d3ee', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                                {item.count} {item.count === 1 ? 'case' : 'cases'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>Standard logs are empty. Submit symptoms in the Analyzer to see trend terms.</p>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: AI Consult Wellness Chatbot */}
+            {dashboardTab === 'CHATBOT' && (
+              <div className="chatbot-console-container-3d animate-fade-in">
+                <section className="glass-card chatbot-card-3d">
+                  <div className="card-glow-border"></div>
+                  
+                  <div className="chatbot-header">
+                    <div className="chatbot-header-info">
+                      <span className="chatbot-badge-3d">{translations[language].chatbotBadge || "Wellness AI"}</span>
+                      <h2>{translations[language].chatbotTitle}</h2>
+                      <p className="subtitle">{translations[language].chatbotSubtitle}</p>
+                    </div>
+                  </div>
+
+                  <div className="chat-messages-box">
+                    {chatMessages.length === 0 ? (
+                      <div className="empty-chat-state">
+                        <span className="empty-chat-icon animate-pulse">💬</span>
+                        <p className="empty-chat-main-text">{translations[language].emptyChatMain}</p>
+                        <p className="empty-chat-sub-text">{translations[language].emptyChatSub}</p>
+                        
+                        <div className="chat-presets-list">
+                          <button type="button" className="chat-preset-btn" onClick={() => setChatInput(translations[language].queryAcidity)}>
+                            {translations[language].chatAcidityDiet}
+                          </button>
+                          <button type="button" className="chat-preset-btn" onClick={() => setChatInput(translations[language].queryFever)}>
+                            {translations[language].chatFeverDiet}
+                          </button>
+                          <button type="button" className="chat-preset-btn" onClick={() => setChatInput(translations[language].queryWomen)}>
+                            {translations[language].chatWomenDiet}
+                          </button>
+                          <button type="button" className="chat-preset-btn" onClick={() => setChatInput(translations[language].querySleep)}>
+                            {translations[language].chatSleepDiet}
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      history.map((item) => (
-                        <div key={item._id} className="history-item-3d">
-                          <div className="history-item-top">
-                            <span className={`mini-badge-3d ${item.risk}`}>{item.risk}</span>
-                            <span className="history-time">{formatTime(item.timestamp)}</span>
-                          </div>
-                          <div className="history-item-body">
-                            <p className="history-symptoms"><strong>Symptoms:</strong> {item.symptoms} {item.age !== undefined && <span className="history-item-age-3d">({item.gender === 'female' ? '👩' : item.gender === 'male' ? '👨' : '🧑'} {item.age} yrs)</span>}</p>
-                            <p className="history-suggestion"><strong>Specialist:</strong> {item.doctor}</p>
+                      chatMessages.map((msg, index) => (
+                        <div key={index} className={`chat-message-row ${msg.role === 'user' ? 'user-row' : 'assistant-row'}`}>
+                          <div className={`chat-message-bubble ${msg.role === 'user' ? 'user-bubble' : 'assistant-bubble'}`}>
+                            <span className="chat-sender-avatar">
+                              {msg.role === 'user' ? '👤' : '🤖'}
+                            </span>
+                            <div className="chat-message-content">
+                              {msg.file_name && (
+                                <div className="chat-attachment-pill-display">
+                                  <span className="attachment-icon">📎</span>
+                                  <span className="attachment-filename">{msg.file_name}</span>
+                                </div>
+                              )}
+                              {msg.content.split('\n').map((line, lIdx) => {
+                                if (line.trim().startsWith('*') || line.trim().startsWith('-')) {
+                                  return <li key={lIdx} className="chat-msg-li">{line.replace(/^[\*\-]\s*/, '')}</li>;
+                                }
+                                return <p key={lIdx} className="chat-msg-p">{line}</p>;
+                              })}
+                            </div>
                           </div>
                         </div>
                       ))
                     )}
-                  </div>
-                </section>
-              )}
-            </div>
-            
-          </div>
-        ) : (
-          <div className="chatbot-console-container-3d animate-fade-in">
-            <section className="glass-card chatbot-card-3d">
-              <div className="card-glow-border"></div>
-              
-              <div className="chatbot-header">
-                <div className="chatbot-header-info">
-                  <span className="chatbot-badge-3d">Wellness AI</span>
-                  <h2>Clinical Wellness & Diet Agent</h2>
-                  <p className="subtitle">Ask about diet plans, food items to include or avoid, lifestyle changes, and general health tips based on your condition.</p>
-                </div>
-              </div>
-
-              <div className="chat-messages-box">
-                {chatMessages.length === 0 ? (
-                  <div className="empty-chat-state">
-                    <span className="empty-chat-icon animate-pulse">💬</span>
-                    <p className="empty-chat-main-text">Start consulting with MediGuard AI Agent</p>
-                    <p className="empty-chat-sub-text">Type a query below or select a quick starter prompt. The agent will analyze and suggest healthy guidelines.</p>
                     
-                    <div className="chat-presets-list">
-                      <button type="button" className="chat-preset-btn" onClick={() => setChatInput("What should I eat when feeling high acidity and heartburn?")}>
-                        🍋 Diet for Acidity
-                      </button>
-                      <button type="button" className="chat-preset-btn" onClick={() => setChatInput("Can you suggest a diet plan and lifestyle advice for high fever?")}>
-                        🍵 Lifestyle for Fever
-                      </button>
-                      <button type="button" className="chat-preset-btn" onClick={() => setChatInput("What foods should I avoid if I suspect pregnancy menstrual cramps?")}>
-                        🤰 Women's Health Diet
-                      </button>
-                      <button type="button" className="chat-preset-btn" onClick={() => setChatInput("Can you suggest stress relief and dietary recommendations for insomnia/lack of sleep?")}>
-                        💤 Rest & Sleep Guidelines
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  chatMessages.map((msg, index) => (
-                    <div key={index} className={`chat-message-row ${msg.role === 'user' ? 'user-row' : 'assistant-row'}`}>
-                      <div className={`chat-message-bubble ${msg.role === 'user' ? 'user-bubble' : 'assistant-bubble'}`}>
-                        <span className="chat-sender-avatar">
-                          {msg.role === 'user' ? '👤' : '🤖'}
-                        </span>
-                        <div className="chat-message-content">
-                          {msg.file_name && (
-                            <div className="chat-attachment-pill-display">
-                              <span className="attachment-icon">📎</span>
-                              <span className="attachment-filename">{msg.file_name}</span>
-                            </div>
-                          )}
-                          {msg.content.split('\n').map((line, lIdx) => {
-                            if (line.trim().startsWith('*') || line.trim().startsWith('-')) {
-                              return <li key={lIdx} className="chat-msg-li">{line.replace(/^[\*\-]\s*/, '')}</li>;
-                            }
-                            return <p key={lIdx} className="chat-msg-p">{line}</p>;
-                          })}
+                    {chatLoading && (
+                      <div className="chat-message-row assistant-row">
+                        <div className="chat-message-bubble assistant-bubble typing-bubble">
+                          <span className="chat-sender-avatar animate-spin">⚕️</span>
+                          <div className="typing-indicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </div>
                         </div>
                       </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+
+                  {selectedFile && (
+                    <div className="chat-upload-preview-container-3d">
+                      <span className="file-icon">📄</span>
+                      <span className="file-name">{selectedFile.name}</span>
+                      <span className="file-size">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                      <button type="button" className="remove-file-btn" onClick={() => setSelectedFile(null)}>✕</button>
                     </div>
-                  ))
-                )}
-                
-                {chatLoading && (
-                  <div className="chat-message-row assistant-row">
-                    <div className="chat-message-bubble assistant-bubble typing-bubble">
-                      <span className="chat-sender-avatar animate-spin">⚕️</span>
-                      <div className="typing-indicator">
-                        <span></span>
-                        <span></span>
-                        <span></span>
+                  )}
+
+                  <form onSubmit={handleSendChatMessage} className="chat-input-form-3d">
+                    <input
+                      type="file"
+                      id="chat-file-upload"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setSelectedFile(e.target.files[0]);
+                        }
+                      }}
+                      accept="image/*,application/pdf,text/plain"
+                    />
+                    <label htmlFor="chat-file-upload" className="chat-attach-btn-3d" title="Attach Medical Report (PDF, Image, Text)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="attach-icon-3d">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      </svg>
+                    </label>
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder={chatLoading ? translations[language].placeholderChatLoading : translations[language].placeholderChat}
+                      className="chat-text-input-3d"
+                      disabled={chatLoading}
+                      required={!selectedFile}
+                    />
+                    <button type="submit" className="chat-send-btn-3d" disabled={chatLoading || (!chatInput.trim() && !selectedFile)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="send-icon-3d">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    </button>
+                  </form>
+                </section>
+              </div>
+            )}
+
+            {/* TAB 6: Emergency Center */}
+            {dashboardTab === 'EMERGENCY' && (
+              <div className="grid-layout">
+                {/* Left Panel: Hotlines koordinations */}
+                <div className="analyzer-panel">
+                  <section className="glass-card result-card-3d Emergency-glow-active" style={{ border: '1.5px solid var(--emergency-border)', background: 'linear-gradient(135deg, rgba(153,27,27,0.1), rgba(15,23,42,0.95))' }}>
+                    <div className="card-header" style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                      <span style={{ fontSize: '2.5rem' }}>🚨</span>
+                      <div>
+                        <h2 style={{ color: 'var(--emergency-text)', fontWeight: '800', fontSize: '1.4rem' }}>Emergency Helpdesk Terminal</h2>
+                        <p className="subtitle" style={{ color: 'var(--text-secondary)' }}>Immediate national triage support coordinates. Please remain calm and administer basic guidelines while waiting for emergency vehicles.</p>
                       </div>
                     </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
 
-              {selectedFile && (
-                <div className="chat-upload-preview-container-3d">
-                  <span className="file-icon">📄</span>
-                  <span className="file-name">{selectedFile.name}</span>
-                  <span className="file-size">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
-                  <button type="button" className="remove-file-btn" onClick={() => setSelectedFile(null)}>✕</button>
+                    <div style={{ marginTop: '1.2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {/* Triage hotlines */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem' }}>
+                        <a href="tel:112" style={{ textDecoration: 'none', background: 'var(--emergency-border)', color: 'white', padding: '0.8rem', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', fontWeight: '800', boxShadow: '0 0 10px rgba(239,68,68,0.4)', transition: 'all 0.2s ease', border: '1px solid var(--emergency-border)' }}>
+                          <span style={{ fontSize: '1.4rem' }}>📞</span>
+                          <span>Call 112</span>
+                          <span style={{ fontSize: '0.55rem', fontWeight: '400' }}>National Emergency</span>
+                        </a>
+                        <a href="tel:108" style={{ textDecoration: 'none', background: '#dc2626', color: 'white', padding: '0.8rem', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', fontWeight: '800', boxShadow: '0 0 10px rgba(220,38,38,0.4)', transition: 'all 0.2s ease', border: '1px solid #dc2626' }}>
+                          <span style={{ fontSize: '1.4rem' }}>🚑</span>
+                          <span>Call 108</span>
+                          <span style={{ fontSize: '0.55rem', fontWeight: '400' }}>Ambulance Dispatch</span>
+                        </a>
+                        <a href="tel:104" style={{ textDecoration: 'none', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', padding: '0.8rem', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', fontWeight: '800', border: '1px solid var(--border-color)' }}>
+                          <span style={{ fontSize: '1.4rem' }}>☎️</span>
+                          <span>Call 104</span>
+                          <span style={{ fontSize: '0.55rem', fontWeight: '400' }}>State Health Info</span>
+                        </a>
+                      </div>
+
+                      {/* OSM Hospital routing shortcut */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--text-primary)' }}>🗺️ Find Nearest Hospital Emergency Ward</h4>
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>Trigger our interactive mapping components to scan Overpass APIs for matching hospital emergency facilities nearby.</p>
+                        <button
+                          type="button"
+                          className="submit-btn-3d"
+                          onClick={() => {
+                            setDashboardTab('ANALYZER');
+                            setSymptoms('Severe chest pain and sudden shortness of breath');
+                          }}
+                          style={{ background: 'linear-gradient(135deg, var(--emergency-border), #dc2626)', border: 'none', color: 'white', width: '100%', padding: '0.6rem', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', marginTop: '0.4rem', borderRadius: '6px' }}
+                        >
+                          🔍 Find Nearest Emergency Wards on Map
+                        </button>
+                      </div>
+                    </div>
+                  </section>
                 </div>
-              )}
 
-              <form onSubmit={handleSendChatMessage} className="chat-input-form-3d">
-                <input
-                  type="file"
-                  id="chat-file-upload"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setSelectedFile(e.target.files[0]);
-                    }
-                  }}
-                  accept="image/*,application/pdf,text/plain"
-                />
-                <label htmlFor="chat-file-upload" className="chat-attach-btn-3d" title="Attach Medical Report (PDF, Image, Text)">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="attach-icon-3d">
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
-                </label>
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder={chatLoading ? "AI Agent is compiling recommendation..." : "Ask Wellness AI about foods, diet or lifestyle advice..."}
-                  className="chat-text-input-3d"
-                  disabled={chatLoading}
-                  required={!selectedFile}
-                />
-                <button type="submit" className="chat-send-btn-3d" disabled={chatLoading || (!chatInput.trim() && !selectedFile)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="send-icon-3d">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </button>
-              </form>
-            </section>
+                {/* Right Panel: First aid guidelines */}
+                <div className="history-panel">
+                  <section className="glass-card" style={{ padding: '1.2rem', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-primary)', textTransform: 'uppercase', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.4rem' }}>📖 Life-Saving First Aid Protocols</h3>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.01)', borderLeft: '3px solid #dc2626', padding: '0.6rem 0.8rem', borderRadius: '0 6px 6px 0' }}>
+                        <strong style={{ fontSize: '0.82rem', color: '#f87171', display: 'block' }}>🫀 1. Cardiac Arrest CPR</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.2rem 0 0 0' }}>Lay victim flat. Push hard and fast in the center of the chest (100-120 compressions per minute). Use body weight. Keep arms locked straight.</p>
+                      </div>
+
+                      <div style={{ background: 'rgba(255,255,255,0.01)', borderLeft: '3px solid #f59e0b', padding: '0.6rem 0.8rem', borderRadius: '0 6px 6px 0' }}>
+                        <strong style={{ fontSize: '0.82rem', color: '#fbbf24', display: 'block' }}>🩸 2. Severe Bleeding Control</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.2rem 0 0 0' }}>Apply direct, firm pressure on the wound with a clean cloth. Elevate the bleeding limb. If bleeding is arterial/heavy, apply a tourniquet above the wound.</p>
+                      </div>
+
+                      <div style={{ background: 'rgba(255,255,255,0.01)', borderLeft: '3px solid var(--primary)', padding: '0.6rem 0.8rem', borderRadius: '0 6px 6px 0' }}>
+                        <strong style={{ fontSize: '0.82rem', color: '#22d3ee', display: 'block' }}>🗣️ 3. Choking Heimlich Maneuver</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.2rem 0 0 0' }}>Stand behind victim, wrap arms around waist. Make a fist and place it above navel. Grasp fist and give quick, inward-upward thrusts.</p>
+                      </div>
+
+                      <div style={{ background: 'rgba(255,255,255,0.01)', borderLeft: '3px solid var(--accent)', padding: '0.6rem 0.8rem', borderRadius: '0 6px 6px 0' }}>
+                        <strong style={{ fontSize: '0.82rem', color: '#34d399', display: 'block' }}>🧠 4. Stroke FAST Assessment</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.2rem 0 0 0' }}><strong>F</strong>ace drooping, <strong>A</strong>rm weakness, <strong>S</strong>peech difficulty, <strong>T</strong>ime to call emergency services. Act within the golden hours.</p>
+                      </div>
+
+                      <div style={{ background: 'rgba(255,255,255,0.01)', borderLeft: '3px solid #f472b6', padding: '0.6rem 0.8rem', borderRadius: '0 6px 6px 0' }}>
+                        <strong style={{ fontSize: '0.82rem', color: '#f472b6', display: 'block' }}>🍬 5. Severe Diabetic Shock</strong>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.2rem 0 0 0' }}>If victim is conscious and showing confusion/sweating, provide fast-acting glucose: sugar cubes, honey, or sweet fruit juice immediately.</p>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            )}
+            
           </div>
         )}
-        
-      </div>
-    )}
 
       </main>
 
