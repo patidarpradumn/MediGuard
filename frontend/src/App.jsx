@@ -123,9 +123,9 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
     const query = `
       [out:json][timeout:15];
       (
-        nwr["amenity"="hospital"](around:8000, ${lat}, ${lon});
-        nwr["amenity"="doctors"](around:8000, ${lat}, ${lon});
-        nwr["amenity"="clinic"](around:8000, ${lat}, ${lon});
+        nw["amenity"="hospital"](around:8000, ${lat}, ${lon});
+        nw["amenity"="doctors"](around:8000, ${lat}, ${lon});
+        nw["amenity"="clinic"](around:8000, ${lat}, ${lon});
       );
       out center 35;
     `;
