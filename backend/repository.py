@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from pymongo import MongoClient
@@ -48,115 +49,152 @@ class DatabaseConnection:
 
 
 class UserRepository:
-    """Handles data operations for User records."""
+    """Handles data operations for User records with in-memory fallback."""
+    _mock_users: Dict[str, Dict[str, Any]] = {}
 
     @staticmethod
     def get_by_email(email: str) -> Optional[Dict[str, Any]]:
         db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
         if db is None:
-            logger.warning("Database offline. Cannot fetch user.")
-            return None
+            logger.warning("Database offline. Using mock in-memory store for lookup.")
+            return UserRepository._mock_users.get(email_key)
         try:
-            return db.users.find_one({"email": email})
+            user = db.users.find_one({"email": email_key})
+            if user:
+                return user
+            return UserRepository._mock_users.get(email_key)
         except Exception as e:
             logger.error(f"Failed to query user by email {email}: {e}")
-            return None
+            return UserRepository._mock_users.get(email_key)
 
     @staticmethod
     def create(email: str, password_hash: str) -> Optional[Dict[str, Any]]:
         db = DatabaseConnection.get_db()
-        if db is None:
-            logger.warning("Database offline. Cannot create user.")
+        email_key = email.strip().lower()
+        
+        if UserRepository.get_by_email(email):
+            logger.warning(f"User with email {email} already exists.")
             return None
+            
+        user_doc = {
+            "email": email_key,
+            "password_hash": password_hash,
+            "is_verified": False,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        # Always register in mock memory as fallback
+        UserRepository._mock_users[email_key] = user_doc
+        
+        if db is None:
+            logger.warning("Database offline. Saved user to mock in-memory store.")
+            return user_doc
         try:
-            if UserRepository.get_by_email(email):
-                logger.warning(f"User with email {email} already exists.")
-                return None
-                
-            user_doc = {
-                "email": email,
-                "password_hash": password_hash,
-                "is_verified": False,
-                "created_at": datetime.utcnow().isoformat()
-            }
             db.users.insert_one(user_doc)
-            logger.info(f"Created pending user record for email: {email}")
+            logger.info(f"Created pending user record in MongoDB for email: {email}")
             return user_doc
         except Exception as e:
-            logger.error(f"Failed to create user: {e}")
-            return None
+            logger.error(f"Failed to create user in MongoDB: {e}. Saved in memory.")
+            return user_doc
 
     @staticmethod
     def verify(email: str) -> bool:
         db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
+        # Always update in mock memory
+        if email_key in UserRepository._mock_users:
+            UserRepository._mock_users[email_key]["is_verified"] = True
+            
         if db is None:
-            return False
+            logger.warning("Database offline. Verified user in mock in-memory store.")
+            return email_key in UserRepository._mock_users
         try:
             result = db.users.update_one(
-                {"email": email},
+                {"email": email_key},
                 {"$set": {"is_verified": True}}
             )
             if result.modified_count > 0:
-                logger.info(f"User email {email} successfully marked verified.")
+                logger.info(f"User email {email} successfully marked verified in MongoDB.")
                 return True
-            return False
+            return email_key in UserRepository._mock_users
         except Exception as e:
             logger.error(f"Failed to verify user email {email}: {e}")
-            return False
+            return email_key in UserRepository._mock_users
 
     @staticmethod
     def set_conversation_id(email: str, conversation_id: str) -> bool:
         db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
+        if email_key in UserRepository._mock_users:
+            UserRepository._mock_users[email_key]["chat_conversation_id"] = conversation_id
+            
         if db is None:
-            return False
+            return email_key in UserRepository._mock_users
         try:
             db.users.update_one(
-                {"email": email},
+                {"email": email_key},
                 {"$set": {"chat_conversation_id": conversation_id}}
             )
             return True
         except Exception as e:
             logger.error(f"Failed to set conversation ID for {email}: {e}")
-            return False
+            return email_key in UserRepository._mock_users
 
 
 class PredictionRepository:
-    """Handles data operations for Symptom Prediction / Diagnostic History logs."""
+    """Handles data operations for Symptom Prediction / Diagnostic History logs with in-memory fallback."""
+    _mock_predictions: List[Dict[str, Any]] = []
 
     @staticmethod
     def save(symptoms: str, age: int, gender: str, email: str, analysis_result: Dict[str, Any]) -> Optional[str]:
         db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        record_id = str(uuid.uuid4())
+        record = {
+            "_id": record_id,
+            "email": email_key,
+            "symptoms": symptoms,
+            "age": age,
+            "gender": gender,
+            "doctor": analysis_result.get("doctor"),
+            "risk": analysis_result.get("risk"),
+            "advice": analysis_result.get("advice"),
+            "matched_symptom": analysis_result.get("matched_symptom"),
+            "home_remedies": analysis_result.get("home_remedies"),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        # Store in mock memory
+        PredictionRepository._mock_predictions.append(record)
+        
         if db is None:
-            logger.warning("Database connection unavailable. Prediction history not saved.")
-            return None
+            logger.warning("Database connection unavailable. Saved prediction to in-memory store.")
+            return record_id
         try:
-            record = {
-                "email": email,
-                "symptoms": symptoms,
-                "age": age,
-                "gender": gender,
-                "doctor": analysis_result.get("doctor"),
-                "risk": analysis_result.get("risk"),
-                "advice": analysis_result.get("advice"),
-                "matched_symptom": analysis_result.get("matched_symptom"),
-                "home_remedies": analysis_result.get("home_remedies"),
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            result = db.predictions.insert_one(record)
+            # Create a copy without the string _id so Mongo creates its own ObjectId
+            mongo_record = record.copy()
+            del mongo_record["_id"]
+            result = db.predictions.insert_one(mongo_record)
             logger.info(f"Saved prediction history with ID: {result.inserted_id} for user {email}")
             return str(result.inserted_id)
         except Exception as e:
             logger.error(f"Failed to save prediction to MongoDB: {e}")
-            return None
+            return record_id
 
     @staticmethod
     def get_by_user(email: str, limit: int = 10) -> List[Dict[str, Any]]:
         db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
         if db is None:
-            logger.warning("Database connection unavailable. Cannot fetch history.")
-            return []
+            user_preds = [p for p in PredictionRepository._mock_predictions if p["email"] == email_key]
+            user_preds.sort(key=lambda x: x["timestamp"], reverse=True)
+            return user_preds[:limit]
         try:
-            cursor = db.predictions.find({"email": email}).sort("timestamp", -1).limit(limit)
+            cursor = db.predictions.find({"email": email_key}).sort("timestamp", -1).limit(limit)
             predictions = []
             for doc in cursor:
                 doc["_id"] = str(doc["_id"])
@@ -164,41 +202,56 @@ class PredictionRepository:
             return predictions
         except Exception as e:
             logger.error(f"Failed to retrieve predictions for user {email}: {e}")
-            return []
+            user_preds = [p for p in PredictionRepository._mock_predictions if p["email"] == email_key]
+            user_preds.sort(key=lambda x: x["timestamp"], reverse=True)
+            return user_preds[:limit]
 
 
 class ChatRepository:
-    """Handles message saving and loading for the Wellness Assistant Chatbot."""
+    """Handles message saving and loading for the Wellness Assistant Chatbot with in-memory fallback."""
+    _mock_chats: List[Dict[str, Any]] = []
 
     @staticmethod
     def save_message(email: str, role: str, content: str, file_name: Optional[str] = None) -> Optional[str]:
         db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        record_id = str(uuid.uuid4())
+        record = {
+            "_id": record_id,
+            "email": email_key,
+            "role": role,
+            "content": content,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        if file_name:
+            record["file_name"] = file_name
+            
+        # Store in mock memory
+        ChatRepository._mock_chats.append(record)
+        
         if db is None:
-            logger.warning("Database connection unavailable. Chat message not saved.")
-            return None
+            logger.warning("Database connection unavailable. Saved chat message to in-memory store.")
+            return record_id
         try:
-            record = {
-                "email": email,
-                "role": role,
-                "content": content,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-            if file_name:
-                record["file_name"] = file_name
-            result = db.chat_logs.insert_one(record)
+            mongo_record = record.copy()
+            del mongo_record["_id"]
+            result = db.chat_logs.insert_one(mongo_record)
             return str(result.inserted_id)
         except Exception as e:
             logger.error(f"Failed to save chat message to MongoDB: {e}")
-            return None
+            return record_id
 
     @staticmethod
     def get_history_by_user(email: str, limit: int = 50) -> List[Dict[str, Any]]:
         db = DatabaseConnection.get_db()
+        email_key = email.strip().lower()
+        
         if db is None:
-            logger.warning("Database connection unavailable. Cannot fetch chat history.")
-            return []
+            user_chats = [c for c in ChatRepository._mock_chats if c["email"] == email_key]
+            user_chats.sort(key=lambda x: x["timestamp"])
+            return user_chats[:limit]
         try:
-            cursor = db.chat_logs.find({"email": email}).sort("timestamp", 1).limit(limit)
+            cursor = db.chat_logs.find({"email": email_key}).sort("timestamp", 1).limit(limit)
             messages = []
             for doc in cursor:
                 doc["_id"] = str(doc["_id"])
@@ -206,4 +259,6 @@ class ChatRepository:
             return messages
         except Exception as e:
             logger.error(f"Failed to retrieve chat history for user {email}: {e}")
-            return []
+            user_chats = [c for c in ChatRepository._mock_chats if c["email"] == email_key]
+            user_chats.sort(key=lambda x: x["timestamp"])
+            return user_chats[:limit]
