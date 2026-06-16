@@ -41,3 +41,5 @@ mongo-data/
 /tmp/
 chat_sessions/
 uploads/
+.vercel
+.env*

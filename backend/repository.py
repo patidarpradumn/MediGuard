@@ -2,7 +2,9 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
+# pyrefly: ignore [missing-import]
 from pymongo import MongoClient
+# pyrefly: ignore [missing-import]
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 from config import Config
@@ -352,6 +354,7 @@ class LabReportRepository:
         if db is None:
             return mock_deleted
         try:
+            # pyrefly: ignore [missing-import]
             from bson.objectid import ObjectId
             try:
                 oid = ObjectId(report_id)
@@ -438,6 +441,7 @@ class MedicalFileRepository:
                     return r
             return None
         try:
+            # pyrefly: ignore [missing-import]
             from bson.objectid import ObjectId
             try:
                 oid = ObjectId(report_id)
@@ -482,6 +486,7 @@ class MedicalFileRepository:
         if db is None:
             return file_path_to_delete
         try:
+            # pyrefly: ignore [missing-import]
             from bson.objectid import ObjectId
             doc = None
             try:

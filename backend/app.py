@@ -210,6 +210,10 @@ def get_nearby_hospitals(lat: float, lon: float):
       nw["amenity"="hospital"](around:8000, {lat}, {lon});
       nw["amenity"="doctors"](around:8000, {lat}, {lon});
       nw["amenity"="clinic"](around:8000, {lat}, {lon});
+      nw["healthcare"="laboratory"](around:8000, {lat}, {lon});
+      nw["amenity"="laboratory"](around:8000, {lat}, {lon});
+      nw["healthcare"="pathology"](around:8000, {lat}, {lon});
+      nw["amenity"="pathology"](around:8000, {lat}, {lon});
     );
     out center 35;
     """

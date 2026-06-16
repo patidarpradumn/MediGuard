@@ -78,7 +78,8 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
         orthopedic: ["ortho", "bone", "joint", "orthopedic", "orthopaedic", "fracture"],
         neurologist: ["neuro", "brain", "spine", "neurologist", "neurology", "nerve"],
         gastroenterologist: ["gastro", "stomach", "gastroenterologist", "gastroenterology", "abdomen", "digestive"],
-        ophthalmologist: ["eye", "ophthalmologist", "ophthalmology", "vision", "optometry", "optic"]
+        ophthalmologist: ["eye", "ophthalmologist", "ophthalmology", "vision", "optometry", "optic"],
+        pathologylab: ["pathology", "lab", "laboratory", "diagnostic", "blood test", "scan", "imaging", "testing", "pathologist"]
       };
 
       const keywords = keywordsMap[spec] || [spec];
@@ -167,7 +168,8 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
               orthopedic: ["ortho", "bone", "joint", "orthopedic", "orthopaedic", "fracture"],
               neurologist: ["neuro", "brain", "spine", "neurologist", "neurology", "nerve"],
               gastroenterologist: ["gastro", "stomach", "gastroenterologist", "gastroenterology", "abdomen", "digestive"],
-              ophthalmologist: ["eye", "ophthalmologist", "ophthalmology", "vision", "optometry", "optic"]
+              ophthalmologist: ["eye", "ophthalmologist", "ophthalmology", "vision", "optometry", "optic"],
+              pathologylab: ["pathology", "lab", "laboratory", "diagnostic", "blood test", "scan", "imaging", "testing", "pathologist"]
             };
             const keywords = keywordsMap[spec] || [spec];
             const nameLower = name.toLowerCase();
@@ -202,6 +204,7 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
           else if (specialist === "Neurologist") specKey = "Neurologist";
           else if (specialist === "Gastroenterologist") specKey = "Gastro";
           else if (specialist === "Ophthalmologist") specKey = "Ophthal";
+          else if (specialist === "PathologyLab") specKey = "PathologyLab";
 
           const typeLabel = isStrict 
             ? `${translations[language]["spec" + specKey] || specialist}` 
@@ -219,10 +222,15 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
             isStrict
           });
 
+          const nameLower = name.toLowerCase();
+          const isLab = (el.tags?.amenity === "laboratory" || el.tags?.healthcare === "laboratory" || el.tags?.healthcare === "pathology" || el.tags?.amenity === "pathology" || nameLower.includes("lab") || nameLower.includes("pathology") || nameLower.includes("diagnostic"));
+          const markerColor = isLab ? "#8b5cf6" : "#e11d48";
+          const markerChar = isLab ? "🧪" : "+";
+
           L.marker([itemLat, itemLon], {
             icon: L.divIcon({
               className: 'hospital-marker-custom',
-              html: `<div style="background-color: #e11d48; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; box-shadow: 0 0 8px rgba(225, 29, 72, 0.8);">+</div>`,
+              html: `<div style="background-color: ${markerColor}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: ${isLab ? '11px' : '14px'}; box-shadow: 0 0 8px ${markerColor}cc;">${markerChar}</div>`,
               iconSize: [22, 22],
               iconAnchor: [11, 11]
             })
@@ -475,6 +483,7 @@ function OpenStreetMapComponent({ doctorSpecialist, language }) {
               <option value="Neurologist">{translations[language].specNeurologist}</option>
               <option value="Gastroenterologist">{translations[language].specGastro}</option>
               <option value="Ophthalmologist">{translations[language].specOphthal}</option>
+              <option value="PathologyLab">{translations[language].specPathologyLab}</option>
             </select>
           </div>
         </div>
@@ -759,6 +768,7 @@ const translations = {
     specNeurologist: "Neurologist (Brain)",
     specGastro: "Gastroenterologist (Stomach)",
     specOphthal: "Ophthalmologist (Eyes)",
+    specPathologyLab: "Pathology Lab / Diagnostic Center",
 
     // Presets
     tagChestPain: "Chest Pain",
@@ -988,6 +998,7 @@ const translations = {
     specNeurologist: "न्यूरोलॉजिस्ट (Neurologist)",
     specGastro: "पेट रोग विशेषज्ञ (Gastroenterologist)",
     specOphthal: "नेत्र रोग विशेषज्ञ (Ophthalmologist)",
+    specPathologyLab: "पैथोलॉजी लैब / डायग्नोस्टिक सेंटर",
 
     // Presets
     tagChestPain: "सीने में दर्द",
@@ -1217,6 +1228,7 @@ const translations = {
     specNeurologist: "Neurologist (Brain)",
     specGastro: "Gastroenterologist (Stomach)",
     specOphthal: "Ophthalmologist (Eyes)",
+    specPathologyLab: "Pathology Lab / Diagnostic Center",
 
     // Presets
     tagChestPain: "Chest Pain",
@@ -1251,6 +1263,7 @@ const DIAGNOSTIC_TRANSLATIONS = {
     "Child Psychologist": "बाल मनोवैज्ञानिक (Child Psychologist)",
     "Psychologist / Psychiatrist": "मनोवैज्ञानिक / मनोचिकित्सक (Psychologist / Psychiatrist)",
     "Geriatric Psychiatrist / Neurologist": "वृद्ध मनोचिकित्सक / न्यूरोलॉजिस्ट (Geriatric Psychiatrist / Neurologist)",
+    "Pathology Lab / Diagnostic Center": "पैथोलॉजी लैब / डायग्नोस्टिक सेंटर",
     
     // Risks
     "Normal": "सामान्य (Normal)",
@@ -1289,6 +1302,7 @@ const DIAGNOSTIC_TRANSLATIONS = {
     "Child Psychologist": "Child Psychologist",
     "Psychologist / Psychiatrist": "Psychologist / Psychiatrist",
     "Geriatric Psychiatrist / Neurologist": "Geriatric Psychiatrist / Neurologist",
+    "Pathology Lab / Diagnostic Center": "Pathology Lab / Diagnostic Center",
 
     // Risks
     "Normal": "Normal",
@@ -1550,6 +1564,62 @@ function App() {
   // Dashboard Stats State
   const [dashboardStats, setDashboardStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
+
+  // SOS Ambulance states
+  const [sosCountdown, setSosCountdown] = useState(null);
+  const [sosLocation, setSosLocation] = useState(null);
+  const [copiedCoords, setCopiedCoords] = useState(false);
+  const sosTimerRef = React.useRef(null);
+
+  // Trigger SOS call countdown and try to get coordinates
+  const triggerSosCall = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setSosLocation({
+            lat: position.coords.latitude,
+            lon: position.coords.longitude
+          });
+        },
+        (err) => {
+          console.warn("Could not get GPS for SOS", err);
+        }
+      );
+    }
+    setSosCountdown(5);
+  };
+
+  useEffect(() => {
+    if (sosCountdown === null) return;
+    if (sosCountdown === 0) {
+      executeSosCallImmediately();
+      return;
+    }
+
+    sosTimerRef.current = setTimeout(() => {
+      setSosCountdown(prev => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(sosTimerRef.current);
+  }, [sosCountdown]);
+
+  const cancelSosCall = () => {
+    clearTimeout(sosTimerRef.current);
+    setSosCountdown(null);
+  };
+
+  const executeSosCallImmediately = () => {
+    setSosCountdown(null);
+    window.location.href = "tel:108";
+  };
+
+  const copySosCoordinates = () => {
+    if (sosLocation) {
+      navigator.clipboard.writeText(`${sosLocation.lat.toFixed(6)}, ${sosLocation.lon.toFixed(6)}`);
+      setCopiedCoords(true);
+      setTimeout(() => setCopiedCoords(false), 2000);
+    }
+  };
 
 
   // Quick symptom tags for easy testing
@@ -3646,6 +3716,184 @@ function App() {
             {/* TAB 4: Health Dashboard */}
             {dashboardTab === 'DASHBOARD' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                {/* Emergency SOS & Ambulance Quick Action Card */}
+                <div className="glass-card" style={{
+                  padding: '1.2rem',
+                  borderRadius: '12px',
+                  border: '2px solid var(--emergency-border)',
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(15, 23, 42, 0.95))',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1rem',
+                  boxShadow: '0 0 15px rgba(239, 68, 68, 0.15)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 1 }}>
+                    <div>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--emergency-text)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        🚨 EMERGENCY SOS TERMINAL
+                      </h3>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.2rem 0 0 0' }}>
+                        In case of an acute medical crisis, call an ambulance immediately.
+                      </p>
+                    </div>
+                    {/* Flashing dot */}
+                    <div style={{
+                      width: '12px',
+                      height: '12px',
+                      backgroundColor: '#ef4444',
+                      borderRadius: '50%',
+                      boxShadow: '0 0 10px #ef4444',
+                      animation: 'pulse-icon 1.5s infinite alternate'
+                    }}></div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', zIndex: 1 }}>
+                    <button
+                      type="button"
+                      onClick={triggerSosCall}
+                      style={{
+                        background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '0.75rem 1.6rem',
+                        fontSize: '1rem',
+                        fontWeight: '900',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.35)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}
+                    >
+                      🚑 CALL AMBULANCE DIRECT (108)
+                    </button>
+
+                    <a
+                      href="tel:112"
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-color)',
+                        padding: '0.75rem 1.2rem',
+                        fontSize: '0.9rem',
+                        fontWeight: '800',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        textDecoration: 'none'
+                      }}
+                    >
+                      📞 Call Helpline (112)
+                    </a>
+
+                    {/* GPS Info widget */}
+                    <div style={{
+                      padding: '0.5rem 0.8rem',
+                      background: 'rgba(15, 23, 42, 0.4)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.1rem',
+                      marginLeft: 'auto'
+                    }}>
+                      <span style={{ fontSize: '0.62rem', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Live Dispatcher GPS</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: '700', fontFamily: 'monospace', color: '#22d3ee' }}>
+                          {sosLocation ? `${sosLocation.lat.toFixed(5)}, ${sosLocation.lon.toFixed(5)}` : 'Detecting GPS...'}
+                        </span>
+                        {sosLocation && (
+                          <button
+                            type="button"
+                            onClick={copySosCoordinates}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: 0
+                            }}
+                            title="Copy coordinates"
+                          >
+                            📋 {copiedCoords ? 'Copied!' : 'Copy'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Countdown Triage Alert Overlay if calling */}
+                  {sosCountdown !== null && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: 'rgba(15, 23, 42, 0.98)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.8rem',
+                      zIndex: 2,
+                      padding: '1rem'
+                    }}>
+                      <span style={{ fontSize: '2.2rem' }}>🚨</span>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: '900', color: '#ef4444', margin: 0, textAlign: 'center' }}>
+                        INITIATING EMERGENCY AMBULANCE CALL
+                      </h3>
+                      <p style={{ fontSize: '1.4rem', fontWeight: '800', color: 'white', margin: 0 }}>
+                        Dialing in <span style={{ fontSize: '1.8rem', color: '#f87171' }}>{sosCountdown}</span> seconds...
+                      </p>
+                      <div style={{ display: 'flex', gap: '0.8rem', marginTop: '0.4rem' }}>
+                        <button
+                          type="button"
+                          onClick={cancelSosCall}
+                          style={{
+                            background: 'white',
+                            color: 'black',
+                            border: 'none',
+                            padding: '0.5rem 1.2rem',
+                            fontSize: '0.85rem',
+                            fontWeight: '800',
+                            borderRadius: '6px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ❌ CANCEL IMMEDIATELY
+                        </button>
+                        <button
+                          type="button"
+                          onClick={executeSosCallImmediately}
+                          style={{
+                            background: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            padding: '0.5rem 1.2rem',
+                            fontSize: '0.85rem',
+                            fontWeight: '800',
+                            borderRadius: '6px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ⚡ CALL NOW
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Statistics Highlights Row */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                   <div className="glass-card" style={{ padding: '1rem 1.2rem', display: 'flex', flexDirection: 'column', justify: 'center', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
